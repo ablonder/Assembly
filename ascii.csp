@@ -1,0 +1,12 @@
+; prints out all characters in order by ascii value
+
+	.EQU @, 0
+	.EQU DISPOUT, $317
+
+	LDS# $E00
+	LDA# 0
+LOOP:	OUTB DISPOUT
+	ADA# 1
+	CMA# $FF
+	JLT LOOP
+	HLT

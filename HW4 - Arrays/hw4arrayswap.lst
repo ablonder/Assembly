@@ -1,0 +1,86 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              	.EQU @, $000; sets the starting location for the code
+  2.              	.EQU GETNUM, $E01; location of function to get numerical input from the keyboard
+  3.              	.EQU PUTNUM, $E00; location of function to print out numbers
+  4.              	.EQU PUTSTR, $E05; location of function to print out strings
+  5.              	.EQU PUTNL, $E06; location of function to print out a new line
+  6.  000 020E00  	LDS# $E00; sets up the stack to use the MINI_OS
+  7.  001 08001C  INLOOP:	PSH# QLEN; set up the stack to print out the query
+  8.  002 08002B  	PSH# QUERY;
+  9.  003 412E05  	JSR PUTSTR; print out the query
+ 10.  004 120002  	ADS# 2; reset the stack
+ 11.  005 412E01  	JSR GETNUM; get a number from the keyboard
+ 12.  006 200000  	CMA# 0; if it's less than 0, just halt
+ 13.  007 4C202A  	JLE DONE
+ 14.  008 200014  	CMA# 20; otherwise, confirm that the length is less than 20
+ 15.  009 4C2010  	JLE GETARR; if it's less than 20, go fill up the array
+ 16.  00A 08000D  	PSH# ELEN; otherwise, print out an error message
+ 17.  00B 080035  	PSH# ERROR;
+ 18.  00C 412E05  	JSR PUTSTR;
+ 19.  00D 120002  	ADS# 2;
+ 20.  00E 412E06  	JSR PUTNL; put down a new line
+ 21.  00F 402001  	JMP INLOOP; and try again
+ 22.  010 042058  GETARR:	STA ARRLEN; save the array length in memory
+ 23.  011 010000  	LDX# 0; initialize the index register to 0 for looping
+ 24.  012 412E01  NUMLOOP:	JSR GETNUM; get a number from the keyboard
+ 25.  013 044044  	STA+ ARRAY; store it at the corresponding location in the array
+ 26.  014 602058  	AOC ARRLEN; increment the index register and compare to the desired array length
+ 27.  015 4A2012  	JLT NUMLOOP; if we haven't filled the array yet, keep going
+ 28.  016 08001D  	PSH# OLEN; otherwise, print the output message
+ 29.  017 08003A  	PSH# OUTPUT;
+ 30.  018 412E05  	JSR PUTSTR;
+ 31.  019 120002  	ADS# 2;
+ 32.  01A 412E06  	JSR PUTNL;
+ 33.  01B 010000  	LDX# 0; reset the index register to go through the array from the top
+ 34.  01C 084044  LOADLOOP:	PSH+ ARRAY; load the array into the stack
+ 35.  01D 602058  	AOC ARRLEN
+ 36.  01E 4A201C  	JLT LOADLOOP
+ 37.  01F 010000  	LDX# 0; reset the index back to 0
+ 38.  020 FFF013  UNLOADLOOP:	POPA ; I'm going to try unloading to the accumulator
+ 39.  021 044044  	STA+ ARRAY; and then store it in the array
+ 40.  022 602058  	AOC ARRLEN
+ 41.  023 4A2020  	JLT UNLOADLOOP
+ 42.  024 010000  	LDX# 0; reset index register again
+ 43.  025 004044  PRINTLOOP:	LDA+ ARRAY; print out the items of the new re-ordered array
+ 44.  026 412E00  	JSR PUTNUM
+ 45.  027 602058  	AOC ARRLEN
+ 46.  028 4A2025  	JLT PRINTLOOP
+ 47.  029 402001  	JMP INLOOP; when done, go back to get input
+ 48.  02A FFFFFF  DONE:	HLT
+ 49.  02B 456E74  QUERY:	.CHAR 'Enter size of array (max 20)', QLEN; sets up input query for printing
+      02C 657220
+      02D 73697A
+      02E 65206F
+      02F 662061
+      030 727261
+      031 792028
+      032 6D6178
+      033 203230
+      034 292020
+ 50.  035 696E76  ERROR:	.CHAR 'invalid size!', ELEN; sets up error for printing
+      036 616C69
+      037 642073
+      038 697A65
+      039 212020
+ 51.  03A 546865  OUTPUT:	.CHAR 'The array in reverse order is', OLEN; sets up output message
+      03B 206172
+      03C 726179
+      03D 20696E
+      03E 207265
+      03F 766572
+      040 736520
+      041 6F7264
+      042 657220
+      043 697320
+ 52.  044 000000  ARRAY:	.BLKW 20, 0; initialize array to the maximum length of 20
+ 53.  058 000000  ARRLEN:	.WORD 0; store the actual length of the array
+
+                     SYMBOL TABLE CONTENTS
+
+000044 = ARRAY           000058 = ARRLEN          00002A = DONE            
+00000D = ELEN            000035 = ERROR           000010 = GETARR          
+000E01 = GETNUM          000001 = INLOOP          00001C = LOADLOOP        
+000012 = NUMLOOP         00001D = OLEN            00003A = OUTPUT          
+000025 = PRINTLOOP       000E06 = PUTNL           000E00 = PUTNUM          
+000E05 = PUTSTR          00001C = QLEN            00002B = QUERY           
+000020 = UNLOADLOOP      

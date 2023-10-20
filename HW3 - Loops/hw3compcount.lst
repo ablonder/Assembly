@@ -1,0 +1,36 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              	.EQU @, $000; sets starting location to 0 (opposite the stack)
+  2.              	.EQU GETNUM, $E01; storing the addresses in the MINI_OS to see if that helps
+  3.              	.EQU PUTNUM, $E00
+  4.  000 020E00  	LDS# $E00; allows for using MINI_OS I/O facilities by starting the stack
+  5.  001 412E01  	JSR GETNUM; read in critical value to accumulator
+  6.  002 042017  	STA CRITVAL; store the critical value in memory
+  7.  003 412E01  NVALLOOP:	JSR GETNUM; load in number of values to accumulator
+  8.  004 200000  	CMA# 0; compare number of values to 0
+  9.  005 4D2009  	JGT CONTINUE; if the number of values is greater than 0, keep going
+ 10.  006 000000  	LDA# 0; otherwise, set the accumulator to 0
+ 11.  007 412E00  	JSR PUTNUM; and print out the accumulator
+ 12.  008 402003  	JMP NVALLOOP; and then try again
+ 13.  009 042018  CONTINUE:	STA NVAL; store approved number of values in memory
+ 14.  00A 012018  	LDX NVAL; set index register to the number of values to count down
+ 15.  00B 150001  	SBX# 1; subtract 1 from index register since it's counting down to 0
+ 16.  00C 412E01  COUNTLOOP:	JSR GETNUM; load new value into the accumulator
+ 17.  00D 202017  	CMA CRITVAL; compare the latest value to the critical value
+ 18.  00E 4B2010  	JGE CONTLOOP; if it's greater than the critical value, jump ahead
+ 19.  00F 1B2019  	INC LTCOUNT; otherwise, increment the number of values less than the threshold
+ 20.  010 61200C  CONTLOOP:	SOJ COUNTLOOP; decrement the index register and loop, if it's greater than 0
+ 21.  011 002019  	LDA LTCOUNT; load the number of values less than the threshold into the accumulator
+ 22.  012 412E00  	JSR PUTNUM; print out the accumulator
+ 23.  013 FFF020  	NEGA ; negate the number of values less than the threshold to subtract
+ 24.  014 102018  	ADA NVAL; add total number of values to get the amount greater or equal
+ 25.  015 412E00  	JSR PUTNUM;
+ 26.  016 FFFFFF  	HLT ; end program
+ 27.  017 000000  CRITVAL:	.WORD 0; location to store critical value
+ 28.  018 000000  NVAL:	.WORD 0; location to store the number of values
+ 29.  019 000000  LTCOUNT:	.WORD 0; location to store the number of values less than the threshold
+
+                     SYMBOL TABLE CONTENTS
+
+000009 = CONTINUE        000010 = CONTLOOP        00000C = COUNTLOOP       
+000017 = CRITVAL         000E01 = GETNUM          000019 = LTCOUNT         
+000018 = NVAL            000003 = NVALLOOP        000E00 = PUTNUM          

@@ -1,0 +1,29 @@
+	.EQU @, $000; sets starting location to 0 (opposite the stack)
+	.EQU GETNUM, $E01; storing the addresses in the MINI_OS to see if that helps
+	.EQU PUTNUM, $E00
+	LDS# $E00; allows for using MINI_OS I/O facilities by starting the stack
+	JSR GETNUM; read in critical value to accumulator
+	STA CRITVAL; store the critical value in memory
+NVALLOOP:	JSR GETNUM; load in number of values to accumulator
+	CMA# 0; compare number of values to 0
+	JGT CONTINUE; if the number of values is greater than 0, keep going
+	LDA# 0; otherwise, set the accumulator to 0
+	JSR PUTNUM; and print out the accumulator
+	JMP NVALLOOP; and then try again
+CONTINUE:	STA NVAL; store approved number of values in memory
+	LDX NVAL; set index register to the number of values to count down
+	SBX# 1; subtract 1 from index register since it's counting down to 0
+COUNTLOOP:	JSR GETNUM; load new value into the accumulator
+	CMA CRITVAL; compare the latest value to the critical value
+	JGE CONTLOOP; if it's greater than the critical value, jump ahead
+	INC LTCOUNT; otherwise, increment the number of values less than the threshold
+CONTLOOP:	SOJ COUNTLOOP; decrement the index register and loop, if it's greater than 0
+	LDA LTCOUNT; load the number of values less than the threshold into the accumulator
+	JSR PUTNUM; print out the accumulator
+	NEGA ; negate the number of values less than the threshold to subtract
+	ADA NVAL; add total number of values to get the amount greater or equal
+	JSR PUTNUM;
+	HLT ; end program
+CRITVAL:	.WORD 0; location to store critical value
+NVAL:	.WORD 0; location to store the number of values
+LTCOUNT:	.WORD 0; location to store the number of values less than the threshold

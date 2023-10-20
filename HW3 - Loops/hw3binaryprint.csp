@@ -1,0 +1,28 @@
+	.EQU @, $000; sets the starting location (opposite the stack)
+	.EQU GETNUM, $E01; function to get numerical keyboard input
+	.EQU PUTSTR, $E05; function to print string output
+	.EQU PUTNL, $E06; function for printing a newline
+	LDS# $E00; sets up the stack to use the MINI_IOS
+INLOOP:	PSH# QLEN; start by preparing to print out the query (load its length onto the stack)
+	PSH# QUERY; and load the query itself
+	JSR PUTSTR; actually print it out
+	ADS# 2; and back up the stack
+	JSR GETNUM; then get keyboard input
+	CMA# 0; check if it's 0
+	JEQ DONE; if it's 0, then halt the program
+	LDX# 23; reload index register to countdown
+OUTLOOP:	PSH# 1; in any case, the string will have a length of 1, so start there 
+	SHLA ; then check the next bit in the number
+	JOV ONE; if it's a one, jump, otherwise print a 0
+	PSH# OUTZERO; add the zero to the stack
+	JMP PRINT; then jump to printing
+ONE:	PSH# OUTONE; otherwise, add a one to the stack
+PRINT:	JSR PUTSTR; run the print subroutine
+	ADS# 2; fixes the stack pointer
+	SOJ OUTLOOP; decrements the index register and jumps if it's not at 0
+	JSR PUTNL; if it's done printing out this number, make a new line
+	JMP INLOOP; and continue the input loop
+DONE:	HLT
+QUERY:	.CHAR 'Enter a number (0 to quit)', QLEN; defines query string
+OUTONE:	.CHAR '1'; to print out a 1
+OUTZERO:	.CHAR '0'; to print out a 0

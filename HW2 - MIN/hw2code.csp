@@ -1,0 +1,12 @@
+        LDA     $008; 000 load accumulator with value at 008
+        CMA     $009; 001 compare accumulator with value at 009
+        JLT     $006; 002 jump to 006 if the less than flag is on
+        LDA     $009; 003 load accumulator with value at 009
+        STA     $00A; 004 store value in accumulator at 00A
+        JMP     $007; 005 jump to 007
+        STA     $00A; 006 store value in accumulator at 00A
+        HLT	; 007 halt
+X:      .WORD   15; 008 store the value 15 here and label it as X
+Y:      .WORD   25; 009 store the value 25 here and label it as Y
+R:      .WORD   0; 00A store the value 0 here and label it as R
+        .END

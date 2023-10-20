@@ -1,0 +1,146 @@
+	.EQU @, $000; set the starting location
+	.EQU GETNUM, $E01
+	.EQU PUTNUM, $E00
+	.EQU PUTSTR, $E05
+	.EQU PUTNL, $E06
+	.EQU MODES, 10
+
+MAIN:	LDS# $E00; set up the stack
+	PSH# DATA; put the results array on the stack for the data collection subroutine
+STARTLOOP:	PSH# STARTLEN; print out the first input query to get the starting address
+	PSH# STARTQ
+	JSR PUTSTR
+	ADS# 2
+	JSR GETNUM; actually get the user-inputted value
+	CMA# 0; make sure it's greater than 0
+	JLT STARTERROR
+	CMA# $FFF; and less than the highest possible address
+	JLT STARTCONT
+STARTERROR:	PSH# ERRLEN; if it's not a valid address, print out an error message
+	PSH# INERROR
+	JSR PUTSTR
+	ADS# 2
+	JSR PUTNL
+	JMP STARTLOOP; and try again
+STARTCONT:	PSHA ; load the valid starting address onto the stack for the data colleciton subroutine
+	STA NSAMPLE; and hold it in the number of samples to subtract from
+ENDLOOP:	PSH# ENDLEN; print out the query for the ending address
+	PSH# ENDQ
+	JSR PUTSTR
+	ADS# 2
+	JSR GETNUM; actually get the ending address
+	CMA# $FFF; make sure it's less than the maximum address
+	JGT ENDERROR
+	CMA NSAMPLE; and greater than the starting address
+	JGT ENDCONT
+ENDERROR:	PSH# ERRLEN; print out an error message
+	PSH# INERROR
+	JSR PUTSTR
+	ADS# 2
+	JSR PUTNL
+	JMP ENDLOOP; and try again
+ENDCONT:	PSHA ; once we have a valid end address, push it onto the stack for the analysis procedure
+	PSH# MODES; also push on the number of valid modes (which is the size of the data array)
+	PSH# NSAMPLE; and the place to store the total number of samples
+	JSR HSTGRM; now go through that area of memory and fill up the array of addressing modes
+	ADS# 4; clear the stack of everything but the address of the array
+	PSH# MODES; add back on the number of modes
+	PSH NSAMPLE; and the total number of samples (just as a constant this time)
+	JSR NORMLZ; to normalize the results
+	ADS# 1; clear the number of samples off the stack, we just need the array and its length
+	JSR PRINT; print out the results
+	HLT
+
+NSAMPLE:	.WORD 0; to hold the number of addresses examined
+DATA:	.BLKW 10, 0; to hold the data for the histogram
+
+; PROCEDURE HSTGRM(VAR INARR:INTEGER_ARRAY, LOWADDR,HIGHADDR:INTEGER, VAR TOTAL:INTEGER)
+; Goes through the designated area of memory and adds the number of words with each addressing mode to the array
+	.EQU TOTAL, 2
+	.EQU SIZE, 3
+	.EQU HIGHADDR, 4
+	.EQU LOWADDR, 5
+	.EQU INARR, 6
+
+HSTGRM:	BGN# 0
+	PSHA
+	PSHX
+	LDA ! LOWADDR; grab the starting address
+	STA CURADDR; and store it as the current address
+HSTLOOP:	LDA* CURADDR; load the contents of the current address into the accumulator
+	AND MODEMSK; grab the addressing mode
+	DIV MODEDIV; shift the line so we actually have the value of the addressing mode
+	CMA ! SIZE; real operating modes are 0-9, so if it's 10 or greater, it's not real
+	JGE HSTCONT; and the loop should just continue
+	TAX ; if it's a reasonable value, put it in the index register
+	INC& ! INARR; use the index register to increment the corresponding item in the data array
+	INC* ! TOTAL; also increment the total number of values counted
+HSTCONT:	INC CURADDR; now the loop continues with incrementing the current address
+	LDA ! HIGHADDR; grab the ending address from the stack
+	CMA CURADDR; to compare with the current address
+	JGE HSTLOOP; if we haven't passed the ending address yet keep going
+	POPX ; when the loop is done, exit the function
+	POPA
+	FIN# 0
+	RTN
+
+CURADDR:	.WORD 0; to hold the current address being examined
+MODEMSK:	.WORD $00F000; to access the addressing mode (too many bits to be put in directly)
+MODEDIV:	.WORD $1000; and move it over to the lowest bits in the accumulator
+
+; PROCEDURE NORMLZ(VAR INARR:INTEGER_ARRAY, SIZE: INTEGER, TOTAL:INTEGER)
+; goes through the data array and normalizes the results to a percent of the total
+	.EQU NTOTAL, 2
+	.EQU NSIZE, 3
+	.EQU NARR, 4
+
+NORMLZ:	BGN# 0
+	PSHA
+	PSHX
+	LDX ! NSIZE; load up the index array to count down
+	SBX# 1; subtract 1, because we want the last index, not the size
+NLOOP:	LDA& ! NARR; load the current value of the array into the accumulator
+	MUL# 100; multiply it by 100 because fractions don't work, so we have to use percents
+	DIV ! NTOTAL; and then divide by the total number of samples
+	STA& ! NARR; and put the new, normalized value back
+	SOJ NLOOP; subtract and keep looping through the whole data array
+	POPX
+	POPA
+	FIN# 0
+	RTN
+
+; PROCEDURE PRINT(VAR DATA:INTEGER_ARRAY, N:INTEGER)
+; Prints out the histogram (I'm going to see if I can make it pretty)
+	.EQU PN, 2
+	.EQU PDATA, 3
+
+PRINT:	BGN# 0
+	PSHA
+	PSHX
+	LDX# 0; start off the index at 0 (we need to go through the array in order)
+PLOOP:	LDA& ! PDATA; grab the current item in the array
+	CMA# 0; check if there's just a 0
+	JGT PROWLOOP; if not, go and print out the row propperly
+	JSR PUTNL; if it is a 0, just print out a new line
+	JMP PCONT; and continue the loop
+PROWLOOP:	CMA# 10; now check if it's less than 10
+	JGE ROWCONT; if it's at least 10, more needs to be done
+	JSR PUTNUM; if it's less than 10, just print out the value
+	JMP PCONT; and continue the print loop
+ROWCONT:	PSH# NLEN; if it's greater than 10, print out a 9 for that digit
+	PSH# NINE
+	JSR PUTSTR
+	ADS# 2
+	SBA# 10; and then subtract 10 and continue the loop
+	JMP PROWLOOP
+PCONT:	AOC ! PN; increment the index and compare to the number of itmes
+	JLT PLOOP; jump if there's still items to go
+	POPX ; when it's done, end the function
+	POPA
+	FIN# 0
+	RTN
+
+STARTQ:	.CHAR 'Starting address', STARTLEN
+ENDQ:	.CHAR 'Ending address', ENDLEN
+INERROR:	.CHAR 'Invalid address!', ERRLEN
+NINE:	.CHAR '9', NLEN; to print out a cooler histogram

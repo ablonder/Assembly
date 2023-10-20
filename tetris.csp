@@ -1,0 +1,421 @@
+; Tetris program
+	.EQU @, 0
+	; I/O locations
+	.EQU KBDSTAT, $000
+	.EQU KBDDATA, $001
+	.EQU DISPSTAT, $316
+	.EQU DISPDATA, $100
+	.EQU DISPOUT, $317
+	.EQU CURSORX, $314
+	.EQU CURSORY, $315
+	.EQU TIMESTAT, $030
+	.EQU TIMECOUNT, $034
+	.EQU TIMERELD, $031
+	; I/O controls
+	.EQU INTENBL, $80
+	.EQU CLEAR, $40
+	.EQU LDSTTMR, $10
+	.EQU STRTTMR, $30
+	.EQU STPTMR, $20
+	.EQU CLRDISP, $01
+	.EQU SCROLLDISP, $02
+	.EQU BELL, $06
+	; other useful values
+	.EQU BLOCK, $00; currently using null char for blocks, previously tried square currency symbol ($A4)
+	.EQU BORDER, $7C; pipeline for designating the border of play
+	.EQU NPIECES, 7; total number of possible pieces
+	.EQU LBOUND, 9; x bounds of the display
+	.EQU RBOUND, 29
+
+; Main function to handle the basic loop
+	LDS# $E00
+	LDA# CLRDISP; I'm going to start by clearing the display, just to be safe
+	OUTB DISPSTAT
+	LDX# $100; start by adding barriers to each row from the top
+	LDA# BORDER
+SETUPLOOP:	OUTB+ LBOUND; put one at the lower bound
+	OUTB+ RBOUND; and the upper bound
+	ADX# 38; increment the index
+	CMX# $313; check if we've reached the bottom of the screen
+	JLT SETUPLOOP; if not, keep going
+NEWPIECE:	LDX RANDOM; then draw a random piece using memory as my random number generator
+	LDX+ RANDOM; I'm putting the result in the index register so its made unsigned
+	INC RANDOM;
+	TXA ; then put the value in the accumulator to actually work with it
+	MOD# NPIECES
+	MUL# 4; multipy by 4 to get the relative location in memory
+	ADA# IPIECE; and get the spot in memory corresponding to that piece
+	TAX ; put it in the index register for use later
+	PSHF ; I'm going to use the frame pointer to count down for convenience
+	LDF# 0
+NEWPLOOP:	LDA+ ! 0; grab the value stored at the location indicated by the index register (+ the FP)
+	STA ! CURPIECE; store it as the current piece
+	INB* ! CURPIECE; check if there's anything already at that location
+	CMA# $20; by comparing to the space character
+	JNE GAMEOVER; if there's something there, its game over
+	LDA# BLOCK; otherwise display the piece at that location
+	OUTB* ! CURPIECE
+	ADF# 1; increment the frame pointer and check if weve gone through all 4 blocks
+	CMF# 4
+	JLT NEWPLOOP; if not, continue
+	POPF ; pop the frame pointer back out when its done just in case
+	LDA# INTENBL; enable interrupts from the keyboard
+	OR# CLEAR; also clear the buffer
+	OUTB KBDSTAT
+TIMERLOOP:	LDA MAXTIME; load the timer - TODO - have it speed up as it goes
+	OUTW TIMERELD
+	LDA# LDSTTMR; start the timer (loading it from the register I just set up)
+	OUTB TIMESTAT
+	SIE ; enable interrupts
+POLL:	INB TIMESTAT; check on the timer until it's done (interrupts may come in from the keyboard)
+	JGE POLL
+	CIE ; disable interrupts while the piece is moved down
+	PSH# CURPIECE; once the timer is up, move the piece down
+	PSH# NEWLOC
+	JSR MOVEDOWN
+	ADS# 2
+	CMA# 0; check if the move function returned a -1 (indicating a collision)
+	JLT PIECEDONE; if there was a collision, that piece is done
+	LDA# $40; otherwise, clear the timer
+	OUTB TIMESTAT
+	JMP TIMERLOOP; continue with this piece from the beginning of the timer
+PIECEDONE:	PSH# CURPIECE; if the current piece is done, check if it clears out any rows
+	PSH# ROWFILL
+	JSR CLRROW
+	ADS# 2
+	JMP NEWPIECE; and then get a new piece and start again
+GAMEOVER:	LDA# 11; move the cursor to the middle of the screen
+	OUTB CURSORX
+	LDA# 7
+	OUTB CURSORY
+	LDX# 0; loop through the message to print it out
+OVERLOOP:	LDC OVERMSG
+	OUTB DISPOUT
+	AOC# OVERLEN
+	JLT OVERLOOP	
+	HLT
+
+MAXTIME:	.WORD $FFFF; max delay
+
+; PROCEDURE MOVEDOWN(VAR CURPIECE:ADDR_ARRAY, VAR NEWLOC:ADDR_ARRAY) RETURNS INT
+; Moves the current piece down one row or returns -1 if there was a collision (and 1 if there wasn't)
+	.EQU DNEW, 2
+	.EQU DCUR, 3
+
+MOVEDOWN:	BGN# 0
+	PSHX
+	LDX# 0; loop through the current piece
+DOWNLOOP:	LDA& ! DCUR; grab the location of the current block
+	STA DCBLK
+	LDA# $20; then start by emptying out the space it currently occupies on the display
+	OUTB* DCBLK
+	LDA DCBLK; then increment it by a row and store the new location
+	ADA# 38
+	STA& ! DNEW
+	AOC# 4; increment the index and loop again until all 4 blocks have been adjusted
+	JLT DOWNLOOP
+	PSH ! DNEW; use the new location to actually move the piece (checking for collision)
+	PSH ! DCUR
+	JSR MOVEPIECE; we'll just return the same value, which should already be in the accumulator
+	ADS# 2
+	POPX
+	FIN# 0
+	RTN
+
+DCBLK:	.WORD 0; to hold the location of the current block (so addressing doesn't get too complicated)
+
+; PROCEDURE MOVEPIECE(NEWLOC:ADDR_ARRAY, VAR CURPIECE:ADDR_ARRAY) RETURNS INT
+; Checks for collision and moves the piece from the current location to the new location
+; Returns -1 if there was a collision and 1 otherwise
+; (assumes the space the piece was in in the display was cleared when creating newloc)
+	.EQU MCUR, 2
+	.EQU MNEW, 3
+
+MOVEPIECE:	BGN# 0
+	PSHX
+	LDX# 0; loop through the piece to check for a collision
+COLLOOP:	LDA& ! MNEW; grab the location of the current block
+	STA MCBLK
+	CMA# $313; check if it's hit the bottom of the screen
+	JGT COLLISION; if so, that counts as a collision and the loop is done
+	SBA# $100; also check if its out of bounds horizontally (by getting the x location of the block)
+	MOD# 38
+	CMA# LBOUND
+	JLT COLLISION
+	CMA# RBOUND
+	JGT COLLISION
+	INB* MCBLK; if its not going out of bounds, check if there's anything already there
+	CMA# $20
+	JNE COLLISION; if there's something there, its also a collision, finish the loop
+	AOC# 4; otherwise, keep looping until we've gone through the block
+	JLT COLLOOP
+	LDX# 0; if we get through the whole loop, there was no collision, so we can actually move the piece
+MOVELOOP:	LDA& ! MNEW; grab the location of the current block again
+	STA& ! MCUR; store it as the current location
+	STA MCBLK; and actually fill that spot on the display
+	LDA# BLOCK
+	OUTB* MCBLK
+	AOC# 4; keep looping
+	JLT MOVELOOP
+	LDA# 1; when the loop is done, output a 1 through the accumulator
+	JMP DONE; and call it done
+COLLISION:	LDX# 0; if there was a collsion, put the piece back where it was
+CPRLOOP:	LDA& ! MCUR; grab the location of the current block again
+	STA MCBLK
+	LDA# BLOCK; and print it out again
+	OUTB* MCBLK
+	AOC# 4; and keep looping
+	JLT CPRLOOP
+	LDA# 1; when the loop is done, return -1 and exit
+	NEGA
+DONE:	POPX
+	FIN# 0
+	RTN
+
+MCBLK:	.WORD 0; to contain the current block (so things don't get too complicated)
+
+; PROCEDURE CLRROW(CURPIECE:ADDR_ARRAY, VAR ROWFILL:INTEGER_ARRAY)
+; When a piece settles, add it to the number of blocks in each row and check if that clears any rows
+	.EQU ROWS, 2
+	.EQU LOC, 3
+
+CLRROW:	BGN# 0
+	PSHA
+	PSHX
+	LDX# 0; loop through the blocks and add them to the rowfill array
+BLKLOOP:	LDA& ! LOC; get the location of the current block
+	SBA# $100; get the row that its in
+	DIV# 38
+	PSHX ; use the row as an index to increment the corresponding value in the row array
+	TAX
+	INC& ! ROWS
+	LDA& ! ROWS; check if this row is now full
+	CMA# RBOUND-LBOUND
+	JLT CLCONT; if not, the loop continues
+	PSHX ; if the row is full, I'm going to save which row it is for later
+	CMX# 13; then check if it's the last row
+	JLT MVROWS; if not, this is going to be more complicated
+	LDA# SCROLLDISP; but if so, I can just scroll the whole display down - TODO - figure out what's broken here
+	OUTB DISPSTAT
+	JMP MVRFILL; now we just have to deal with shifting down the number of items in each row
+MVROWS:	POPA ; start by peeking at the cleared row number to see if I should just be shifting the counts in the loop
+	PSHA
+	CMA# 13
+	JGE MVRFILL
+	PSHX ; otherwise, it's time to actually shift the display down, which uses the index for the display
+	TXA ; convert row to starting index (almost)
+	MUL# 38
+	ADA# LBOUND
+	TAX ; and store it in the index register
+ROWLOOP:	CMX# 38; if this is the top row (which should only happen if thats the cleared row), just put a space
+	JGT SHIFTROW; otherwise, actually shift the previous row down
+	LDA# $20
+	OUTB+ $100
+	JMP CONTROW; then keep going through the row
+SHIFTROW:	INB+ $100 - 38; if this isn't the top row, get the value at the spot right above this one
+	OUTB+ $100; put it at the corresponding space in this row
+	LDA# $20; then fill that spot in the row above with a space
+	OUTB+ $100 - 38
+CONTROW:	ADX# 1; finally, increment the index and check mod 38 to see if this row is done
+	TXA
+	MOD# 38
+	CMA# RBOUND
+	JLT ROWLOOP
+	POPX ; when the row is done, get back the row number
+MVRFILL:	CMX# 0; again, if this is the top row, just set the number of items to 0
+	JGT SHIFTFILL; otherwise actually shift the list down
+	LDA# 0
+	STA& ! ROWS
+	JMP MVRCONT; and keep looping
+SHIFTFILL:	SBX# 1; if this isn't the top row, get the number of items in the row above to shift that down one
+	LDA& ! ROWS
+	ADX# 1
+	STA& ! ROWS
+	SBX# 1; and also zero the row above out
+	LDA# 0
+	STA& ! ROWS
+	ADX# 1; and get back to the current row
+MVRCONT:	SBX# 1; when we're done loop on to the next one
+	JOV BLKCONT; if we've gone past zero, move on
+	CMX# 0; if we're at the top row, also stop here, since its already been cleared out
+	JLE BLKCONT
+	TST& ! ROWS; otherwise if it is a real row, check if it's empty
+	JEQ MVRCONT; if it is empty try the next one up
+	JMP MVROWS; once we find a real row, shift it down
+	LDA# BORDER; finally, add the border back to the top row
+	OUTB $100+LBOUND
+	OUTB $100+RBOUND
+BLKCONT:	LDX# 0; finally loop through the blocks in this piece to shift down the ones that are above the cleared row
+	POPA ; get the cleared row
+	MUL# 38; use it to calculate the first index of that row for comparison 
+	ADA# $100
+BCLOOP:	CMA& ! LOC; compare this block to the first index of the deleted row
+	JGE BCCONT; if its in that row or beyond, keep looping
+	PSHA ; otherwise hold the row index so we can increment the location of the block by a row
+	LDA& ! LOC
+	ADA# 38
+	STA& ! LOC
+	POPA
+BCCONT:	AOC# 4; finally when that's done, increment the index to keep looping
+	JLT BCLOOP
+CLCONT:	POPX ; once that's all done, check the next block
+	AOC# 4
+	JLT BLKLOOP
+	POPX ; when all the blocks are done, we can exit
+	POPA
+	FIN# 0
+	RTN
+
+; Keyboard Interrupt Service Routine
+; Arrow keys move pieces left or right, and X and Z rotate clockwise/counterclockwise (everything else does nothing)  
+	.EQU Z, $7A
+	.EQU X, $78
+	.EQU ARROW, $1B; the arrows are a little more complicated
+	.EQU L, $4B
+	.EQU R, $4D
+	.EQU D, $50
+	.EQU U, $48
+
+KBDISR:	BGN# 0
+	PSHA
+	PSHX
+	PSHF	
+	LDF# 0; I'm going to be looping using the frame pointer again
+	LDX# 0; I'm also going to want to start the index at 0 for later
+	INB KBDDATA; load in the value from the keyboard and check which action it is
+	CMA# Z; rotating is just a letter key, so I'll take care of that first, handling left
+	JEQ ROTL
+	CMA# X; and right
+	JEQ ROTR
+	CMA# ARROW; arrow commands are going to have to be checked in pieces
+	JNE KBDONE; if it's none of the valid commands, just call it done
+	INB KBDDATA; if it's an arrow, check which direction it is
+	CMA# L; left
+	JEQ MOVEL
+	CMA# R; or right
+	JEQ MOVER;
+	CMA# U; up is equivalent to rotate clockwise
+	JEQ ROTR
+	CMA# D; and down uses the existing movedown function
+	JNE KBDONE; if its none of the above, just call it done
+	PSH# CURPIECE
+	PSH# NEWLOC
+	JSR MOVEDOWN
+	ADS# 2
+	JMP KBDONE; and then call it done
+MOVER:	LDA# 1; if we're moving right, change the indicator value to 1
+	STA DIR
+	JMP MVLOOP
+MOVEL:	LDA# 1; if we're moving left change the indicator value to -1
+	NEGA
+	STA DIR
+MVLOOP:	LDA# $20; start moving by clearing out the corresponding spot on the display for each block
+	OUTB* ! CURPIECE
+	LDA ! CURPIECE; then load in the actual location of that block
+	ADA DIR; increment/decrement the location according to which arrow was used and store it
+	STA ! NEWLOC
+	ADF# 1; and continue the loop
+	CMF# 4
+	JLT MVLOOP
+	JMP MOVE
+ROTR:	LDA# 1; to rotate right, set the indicator to 1
+	STA DIR
+	JMP ROTLOOP
+ROTL:	LDA# 1; to rotate left, set the indicator to -1
+	NEGA
+	STA DIR
+ROTLOOP:	LDA# $20; for both directions, start by clearing the current block from the display
+	OUTB* ! CURPIECE
+	LDA ! CURPIECE; then I'm going to get its coordinates (stored according to the index)
+	SBA# $100; first x
+	MOD# 38
+	STA+ RX
+	LDA ! CURPIECE
+	SBA# $100; and then the y
+	DIV# 38
+	STA+ RY
+	CMF# 0; now, if we're at the first piece (the centroid), just store it as is
+	JGT ROTATE
+	LDA CURPIECE
+	STA NEWLOC
+	ADF# 1; finally, increment the frame pointer and set the index to 1 and loop again
+	LDX# 1
+	JMP ROTLOOP
+ROTATE:	LDX# 0; start actually rotating by calculating the new x and y coordinates based on the centroid
+DIFFLOOP:	LDA+ RX; grab the centroid's coordinate
+	ADX# 1
+	SBA+ RX; subtract the other block's coordinate
+	STA+ RX; and store the difference in place
+	ADX# 2; and then increment again to do the y coordinates with the same loop
+	CMX# 5
+	JLT DIFFLOOP
+	LDA RY+1; now calculate the new x value based on the direction and the centroid
+	MUL DIR
+	ADA RX
+	STA RX+2
+	LDA RX+1; and calculate the new y value (multiplying the x by the oposite sign)
+	MUL DIR
+	NEGA
+	ADA RY; this leaves the new y in the accumulator
+	MUL# 38; which can then be used to calculate the actual index of the block
+	ADA RX+2
+	ADA# $100
+	STA ! NEWLOC; now we have the final value to be stored
+	LDX# 1; reset the index register to 1 to store the next block
+	ADF# 1; and continue the loop
+	CMF# 4
+	JLT ROTLOOP
+MOVE:	PSH# NEWLOC; once that's done, we can move the pieces accordingly (accounting for collision)
+	PSH# CURPIECE
+	JSR MOVEPIECE
+	ADS# 2
+KBDONE:	LDA# INTENBL; once we're done, reset the keyboard with interrupts enabled & a clear buffer
+	OR# CLEAR
+	OUTB KBDSTAT
+	POPF
+	POPX
+	POPA
+	FIN# 0
+	IRTN
+	
+DIR:	.WORD -1; this is essentially going to act as a boolean so I can toggle between move directions
+RX:	.BLKW 3, 0; for rotating, store the coordinates of the centroid, the other block, and the distance
+RY:	.BLKW 2, 0;
+
+CURPIECE:	.BLKW 4, 0; to hold the current location of the piece
+NEWLOC:	.BLKW 4, 0; to hold a potential new location for the piece for testing
+ROWFILL:	.BLKW 14, 0; to hold the number of blocks in each row
+; I'm going to store all possible starting pieces for ease of access (with the center block at the front)
+IPIECE:	.WORD $113
+	.WORD $111
+	.WORD $112
+	.WORD $114
+JPIECE:	.WORD $139
+	.WORD $112
+	.WORD $138
+	.WORD $13A
+LPIECE:	.WORD $139
+	.WORD $114
+	.WORD $138
+	.WORD $13A
+OPIECE:	.WORD $139
+	.WORD $112
+	.WORD $113
+	.WORD $138
+TPIECE:	.WORD $139
+	.WORD $113
+	.WORD $138
+	.WORD $13A
+SPIECE:	.WORD $139
+	.WORD $113
+	.WORD $114
+	.WORD $138
+ZPIECE:	.WORD $139
+	.WORD $112
+	.WORD $113
+	.WORD $13A
+OVERMSG:	.CHAR 'G A M E  O V E R ', OVERLEN; game over message
+RANDOM:	.WORD 1; I'm going to use this to go through memory to draw random numbers
+
+	.EQU @, $FF8; set up keyboard interrupts to go to the right function
+	.WORD KBDISR

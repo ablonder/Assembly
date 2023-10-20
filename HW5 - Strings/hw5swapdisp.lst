@@ -1,0 +1,59 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              	.EQU @, 0
+  2.              	.EQU GETSTR, $E04; I'm going to setup the screen using the MINI_OS
+  3.              
+  4.  000 020E00  MAIN:	LDS# $E00
+  5.  001 0801F4  	PSH# 500; get in a string that will be echoed onto the screen
+  6.  002 080026  	PSH# STR
+  7.  003 080026  	PSH# STR
+  8.  004 412E04  	JSR GETSTR
+  9.  005 120003  	ADS# 3
+ 10.  006 412008  	JSR SWAPDISP
+ 11.  007 FFFFFF  	HLT
+ 12.              
+ 13.              ; PROCEDURE SWAPDISP
+ 14.              ; swaps the locations of all characters in the current display
+ 15.              	.EQU DISP, $100; the start of the video display buffer
+ 16.              	.EQU NCOL, 38; the number of characters in each line (for convenience)
+ 17.              	.EQU NROW, 14; the number of lines in the display
+ 18.              	.EQU CURSORX, $314
+ 19.              
+ 20.  008 680000  SWAPDISP:	BGN# 0
+ 21.  009 FFF010  	PSHA
+ 22.  00A FFF011  	PSHX
+ 23.  00B 010000  	LDX# 0; start the number of rows at 0
+ 24.  00C FFF011  ROWLOOP:	PSHX ; store the current number of rows
+ 25.  00D 010000  	LDX# 0; restart the index register with the number of items in the row
+ 26.  00E 708025  INLOOP:	INB& ROWSTART; grab the item at the current location in the row
+ 27.  00F FFF010  	PSHA ; add it to the stack
+ 28.  010 600026  	AOC# NCOL; increment the index and check to see if its reached the last column
+ 29.  011 4A200E  	JLT INLOOP; keep going as long as it hasn't
+ 30.  012 010000  	LDX# 0; then start again
+ 31.  013 FFF013  OUTLOOP:	POPA ; grab the top item from the stack
+ 32.  014 718025  	OUTB& ROWSTART; print it back onto the screen
+ 33.  015 600026  	AOC# NCOL; and increment the index to keep looping
+ 34.  016 4A2013  	JLT OUTLOOP
+ 35.  017 002025  	LDA ROWSTART; once it's done, we can increment the start of the row
+ 36.  018 100026  	ADA# NCOL
+ 37.  019 042025  	STA ROWSTART
+ 38.  01A FFF014  	POPX ; and get back the old index to increment it and loop
+ 39.  01B 60000E  	AOC# NROW
+ 40.  01C 4A200C  	JLT ROWLOOP
+ 41.  01D 722314  	INW CURSORX; once that's done, the last thing to do is flip the cursor
+ 42.  01E FFF020  	NEGA
+ 43.  01F 100025  	ADA# NCOL-1
+ 44.  020 732314  	OUTW CURSORX
+ 45.  021 FFF014  	POPX
+ 46.  022 FFF013  	POPA
+ 47.  023 690000  	FIN# 0
+ 48.  024 FFF040  	RTN
+ 49.              
+ 50.  025 000100  ROWSTART:	.WORD $100; to hold the starting address in the display of the current row
+ 51.  026 000000  STR:	.WORD 0; a filler location to hold the string that's going on the screen
+
+                     SYMBOL TABLE CONTENTS
+
+000314 = CURSORX         000100 = DISP            000E04 = GETSTR          
+00000E = INLOOP          000000 = MAIN            000026 = NCOL            
+00000E = NROW            000013 = OUTLOOP         00000C = ROWLOOP         
+000025 = ROWSTART        000026 = STR             000008 = SWAPDISP        

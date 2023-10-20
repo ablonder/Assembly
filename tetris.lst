@@ -1,0 +1,463 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              ; Tetris program
+  2.              	.EQU @, 0
+  3.              	; I/O locations
+  4.              	.EQU KBDSTAT, $000
+  5.              	.EQU KBDDATA, $001
+  6.              	.EQU DISPSTAT, $316
+  7.              	.EQU DISPDATA, $100
+  8.              	.EQU DISPOUT, $317
+  9.              	.EQU CURSORX, $314
+ 10.              	.EQU CURSORY, $315
+ 11.              	.EQU TIMESTAT, $030
+ 12.              	.EQU TIMECOUNT, $034
+ 13.              	.EQU TIMERELD, $031
+ 14.              	; I/O controls
+ 15.              	.EQU INTENBL, $80
+ 16.              	.EQU CLEAR, $40
+ 17.              	.EQU LDSTTMR, $10
+ 18.              	.EQU STRTTMR, $30
+ 19.              	.EQU STPTMR, $20
+ 20.              	.EQU CLRDISP, $01
+ 21.              	.EQU SCROLLDISP, $02
+ 22.              	.EQU BELL, $06
+ 23.              	; other useful values
+ 24.              	.EQU BLOCK, $00; currently using null char for blocks, previously tried square currency symbol ($A4)
+ 25.              	.EQU BORDER, $7C; pipeline for designating the border of play
+ 26.              	.EQU NPIECES, 7; total number of possible pieces
+ 27.              	.EQU LBOUND, 9; x bounds of the display
+ 28.              	.EQU RBOUND, 29
+ 29.              
+ 30.              ; Main function to handle the basic loop
+ 31.  000 020E00  	LDS# $E00
+ 32.  001 000001  	LDA# CLRDISP; I'm going to start by clearing the display, just to be safe
+ 33.  002 712316  	OUTB DISPSTAT
+ 34.  003 010100  	LDX# $100; start by adding barriers to each row from the top
+ 35.  004 00007C  	LDA# BORDER
+ 36.  005 714009  SETUPLOOP:	OUTB+ LBOUND; put one at the lower bound
+ 37.  006 71401D  	OUTB+ RBOUND; and the upper bound
+ 38.  007 110026  	ADX# 38; increment the index
+ 39.  008 210313  	CMX# $313; check if we've reached the bottom of the screen
+ 40.  009 4A2005  	JLT SETUPLOOP; if not, keep going
+ 41.  00A 012179  NEWPIECE:	LDX RANDOM; then draw a random piece using memory as my random number generator
+ 42.  00B 014179  	LDX+ RANDOM; I'm putting the result in the index register so its made unsigned
+ 43.  00C 1B2179  	INC RANDOM;
+ 44.  00D FFF003  	TXA ; then put the value in the accumulator to actually work with it
+ 45.  00E 1A0007  	MOD# NPIECES
+ 46.  00F 180004  	MUL# 4; multipy by 4 to get the relative location in memory
+ 47.  010 100157  	ADA# IPIECE; and get the spot in memory corresponding to that piece
+ 48.  011 FFF000  	TAX ; put it in the index register for use later
+ 49.  012 FFF012  	PSHF ; I'm going to use the frame pointer to count down for convenience
+ 50.  013 030000  	LDF# 0
+ 51.  014 005000  NEWPLOOP:	LDA+ ! 0; grab the value stored at the location indicated by the index register (+ the FP)
+ 52.  015 043141  	STA ! CURPIECE; store it as the current piece
+ 53.  016 707141  	INB* ! CURPIECE; check if there's anything already at that location
+ 54.  017 200020  	CMA# $20; by comparing to the space character
+ 55.  018 492038  	JNE GAMEOVER; if there's something there, its game over
+ 56.  019 000000  	LDA# BLOCK; otherwise display the piece at that location
+ 57.  01A 717141  	OUTB* ! CURPIECE
+ 58.  01B 130001  	ADF# 1; increment the frame pointer and check if weve gone through all 4 blocks
+ 59.  01C 230004  	CMF# 4
+ 60.  01D 4A2014  	JLT NEWPLOOP; if not, continue
+ 61.  01E FFF015  	POPF ; pop the frame pointer back out when its done just in case
+ 62.  01F 000080  	LDA# INTENBL; enable interrupts from the keyboard
+ 63.  020 310040  	OR# CLEAR; also clear the buffer
+ 64.  021 712000  	OUTB KBDSTAT
+ 65.  022 002042  TIMERLOOP:	LDA MAXTIME; load the timer - TODO - have it speed up as it goes
+ 66.  023 732031  	OUTW TIMERELD
+ 67.  024 000010  	LDA# LDSTTMR; start the timer (loading it from the register I just set up)
+ 68.  025 712030  	OUTB TIMESTAT
+ 69.  026 FFF032  	SIE ; enable interrupts
+ 70.  027 702030  POLL:	INB TIMESTAT; check on the timer until it's done (interrupts may come in from the keyboard)
+ 71.  028 4B2027  	JGE POLL
+ 72.  029 FFF033  	CIE ; disable interrupts while the piece is moved down
+ 73.  02A 080141  	PSH# CURPIECE; once the timer is up, move the piece down
+ 74.  02B 080145  	PSH# NEWLOC
+ 75.  02C 412043  	JSR MOVEDOWN
+ 76.  02D 120002  	ADS# 2
+ 77.  02E 200000  	CMA# 0; check if the move function returned a -1 (indicating a collision)
+ 78.  02F 4A2033  	JLT PIECEDONE; if there was a collision, that piece is done
+ 79.  030 000040  	LDA# $40; otherwise, clear the timer
+ 80.  031 712030  	OUTB TIMESTAT
+ 81.  032 402022  	JMP TIMERLOOP; continue with this piece from the beginning of the timer
+ 82.  033 080141  PIECEDONE:	PSH# CURPIECE; if the current piece is done, check if it clears out any rows
+ 83.  034 080149  	PSH# ROWFILL
+ 84.  035 412080  	JSR CLRROW
+ 85.  036 120002  	ADS# 2
+ 86.  037 40200A  	JMP NEWPIECE; and then get a new piece and start again
+ 87.  038 00000B  GAMEOVER:	LDA# 11; move the cursor to the middle of the screen
+ 88.  039 712314  	OUTB CURSORX
+ 89.  03A 000007  	LDA# 7
+ 90.  03B 712315  	OUTB CURSORY
+ 91.  03C 010000  	LDX# 0; loop through the message to print it out
+ 92.  03D 502173  OVERLOOP:	LDC OVERMSG
+ 93.  03E 712317  	OUTB DISPOUT
+ 94.  03F 600011  	AOC# OVERLEN
+ 95.  040 4A203D  	JLT OVERLOOP	
+ 96.  041 FFFFFF  	HLT
+ 97.              
+ 98.  042 00FFFF  MAXTIME:	.WORD $FFFF; max delay
+ 99.              
+100.              ; PROCEDURE MOVEDOWN(VAR CURPIECE:ADDR_ARRAY, VAR NEWLOC:ADDR_ARRAY) RETURNS INT
+101.              ; Moves the current piece down one row or returns -1 if there was a collision (and 1 if there wasn't)
+102.              	.EQU DNEW, 2
+103.              	.EQU DCUR, 3
+104.              
+105.  043 680000  MOVEDOWN:	BGN# 0
+106.  044 FFF011  	PSHX
+107.  045 010000  	LDX# 0; loop through the current piece
+108.  046 009003  DOWNLOOP:	LDA& ! DCUR; grab the location of the current block
+109.  047 042056  	STA DCBLK
+110.  048 000020  	LDA# $20; then start by emptying out the space it currently occupies on the display
+111.  049 716056  	OUTB* DCBLK
+112.  04A 002056  	LDA DCBLK; then increment it by a row and store the new location
+113.  04B 100026  	ADA# 38
+114.  04C 049002  	STA& ! DNEW
+115.  04D 600004  	AOC# 4; increment the index and loop again until all 4 blocks have been adjusted
+116.  04E 4A2046  	JLT DOWNLOOP
+117.  04F 083002  	PSH ! DNEW; use the new location to actually move the piece (checking for collision)
+118.  050 083003  	PSH ! DCUR
+119.  051 412057  	JSR MOVEPIECE; we'll just return the same value, which should already be in the accumulator
+120.  052 120002  	ADS# 2
+121.  053 FFF014  	POPX
+122.  054 690000  	FIN# 0
+123.  055 FFF040  	RTN
+124.              
+125.  056 000000  DCBLK:	.WORD 0; to hold the location of the current block (so addressing doesn't get too complicated)
+126.              
+127.              ; PROCEDURE MOVEPIECE(NEWLOC:ADDR_ARRAY, VAR CURPIECE:ADDR_ARRAY) RETURNS INT
+128.              ; Checks for collision and moves the piece from the current location to the new location
+129.              ; Returns -1 if there was a collision and 1 otherwise
+130.              ; (assumes the space the piece was in in the display was cleared when creating newloc)
+131.              	.EQU MCUR, 2
+132.              	.EQU MNEW, 3
+133.              
+134.  057 680000  MOVEPIECE:	BGN# 0
+135.  058 FFF011  	PSHX
+136.  059 010000  	LDX# 0; loop through the piece to check for a collision
+137.  05A 009003  COLLOOP:	LDA& ! MNEW; grab the location of the current block
+138.  05B 04207F  	STA MCBLK
+139.  05C 200313  	CMA# $313; check if it's hit the bottom of the screen
+140.  05D 4D2073  	JGT COLLISION; if so, that counts as a collision and the loop is done
+141.  05E 140100  	SBA# $100; also check if its out of bounds horizontally (by getting the x location of the block)
+142.  05F 1A0026  	MOD# 38
+143.  060 200009  	CMA# LBOUND
+144.  061 4A2073  	JLT COLLISION
+145.  062 20001D  	CMA# RBOUND
+146.  063 4D2073  	JGT COLLISION
+147.  064 70607F  	INB* MCBLK; if its not going out of bounds, check if there's anything already there
+148.  065 200020  	CMA# $20
+149.  066 492073  	JNE COLLISION; if there's something there, its also a collision, finish the loop
+150.  067 600004  	AOC# 4; otherwise, keep looping until we've gone through the block
+151.  068 4A205A  	JLT COLLOOP
+152.  069 010000  	LDX# 0; if we get through the whole loop, there was no collision, so we can actually move the piece
+153.  06A 009003  MOVELOOP:	LDA& ! MNEW; grab the location of the current block again
+154.  06B 049002  	STA& ! MCUR; store it as the current location
+155.  06C 04207F  	STA MCBLK; and actually fill that spot on the display
+156.  06D 000000  	LDA# BLOCK
+157.  06E 71607F  	OUTB* MCBLK
+158.  06F 600004  	AOC# 4; keep looping
+159.  070 4A206A  	JLT MOVELOOP
+160.  071 000001  	LDA# 1; when the loop is done, output a 1 through the accumulator
+161.  072 40207C  	JMP DONE; and call it done
+162.  073 010000  COLLISION:	LDX# 0; if there was a collsion, put the piece back where it was
+163.  074 009002  CPRLOOP:	LDA& ! MCUR; grab the location of the current block again
+164.  075 04207F  	STA MCBLK
+165.  076 000000  	LDA# BLOCK; and print it out again
+166.  077 71607F  	OUTB* MCBLK
+167.  078 600004  	AOC# 4; and keep looping
+168.  079 4A2074  	JLT CPRLOOP
+169.  07A 000001  	LDA# 1; when the loop is done, return -1 and exit
+170.  07B FFF020  	NEGA
+171.  07C FFF014  DONE:	POPX
+172.  07D 690000  	FIN# 0
+173.  07E FFF040  	RTN
+174.              
+175.  07F 000000  MCBLK:	.WORD 0; to contain the current block (so things don't get too complicated)
+176.              
+177.              ; PROCEDURE CLRROW(CURPIECE:ADDR_ARRAY, VAR ROWFILL:INTEGER_ARRAY)
+178.              ; When a piece settles, add it to the number of blocks in each row and check if that clears any rows
+179.              	.EQU ROWS, 2
+180.              	.EQU LOC, 3
+181.              
+182.  080 680000  CLRROW:	BGN# 0
+183.  081 FFF010  	PSHA
+184.  082 FFF011  	PSHX
+185.  083 010000  	LDX# 0; loop through the blocks and add them to the rowfill array
+186.  084 009003  BLKLOOP:	LDA& ! LOC; get the location of the current block
+187.  085 140100  	SBA# $100; get the row that its in
+188.  086 190026  	DIV# 38
+189.  087 FFF011  	PSHX ; use the row as an index to increment the corresponding value in the row array
+190.  088 FFF000  	TAX
+191.  089 1B9002  	INC& ! ROWS
+192.  08A 009002  	LDA& ! ROWS; check if this row is now full
+193.  08B 200014  	CMA# RBOUND-LBOUND
+194.  08C 4A20CF  	JLT CLCONT; if not, the loop continues
+195.  08D FFF011  	PSHX ; if the row is full, I'm going to save which row it is for later
+196.  08E 21000D  	CMX# 13; then check if it's the last row
+197.  08F 4A2093  	JLT MVROWS; if not, this is going to be more complicated
+198.  090 000002  	LDA# SCROLLDISP; but if so, I can just scroll the whole display down - TODO - figure out what's broken here
+199.  091 712316  	OUTB DISPSTAT
+200.  092 4020AB  	JMP MVRFILL; now we just have to deal with shifting down the number of items in each row
+201.  093 FFF013  MVROWS:	POPA ; start by peeking at the cleared row number to see if I should just be shifting the counts in the loop
+202.  094 FFF010  	PSHA
+203.  095 20000D  	CMA# 13
+204.  096 4B20AB  	JGE MVRFILL
+205.  097 FFF011  	PSHX ; otherwise, it's time to actually shift the display down, which uses the index for the display
+206.  098 FFF003  	TXA ; convert row to starting index (almost)
+207.  099 180026  	MUL# 38
+208.  09A 100009  	ADA# LBOUND
+209.  09B FFF000  	TAX ; and store it in the index register
+210.  09C 210026  ROWLOOP:	CMX# 38; if this is the top row (which should only happen if thats the cleared row), just put a space
+211.  09D 4D20A1  	JGT SHIFTROW; otherwise, actually shift the previous row down
+212.  09E 000020  	LDA# $20
+213.  09F 714100  	OUTB+ $100
+214.  0A0 4020A5  	JMP CONTROW; then keep going through the row
+215.  0A1 7040DA  SHIFTROW:	INB+ $100 - 38; if this isn't the top row, get the value at the spot right above this one
+216.  0A2 714100  	OUTB+ $100; put it at the corresponding space in this row
+217.  0A3 000020  	LDA# $20; then fill that spot in the row above with a space
+218.  0A4 7140DA  	OUTB+ $100 - 38
+219.  0A5 110001  CONTROW:	ADX# 1; finally, increment the index and check mod 38 to see if this row is done
+220.  0A6 FFF003  	TXA
+221.  0A7 1A0026  	MOD# 38
+222.  0A8 20001D  	CMA# RBOUND
+223.  0A9 4A209C  	JLT ROWLOOP
+224.  0AA FFF014  	POPX ; when the row is done, get back the row number
+225.  0AB 210000  MVRFILL:	CMX# 0; again, if this is the top row, just set the number of items to 0
+226.  0AC 4D20B0  	JGT SHIFTFILL; otherwise actually shift the list down
+227.  0AD 000000  	LDA# 0
+228.  0AE 049002  	STA& ! ROWS
+229.  0AF 4020B8  	JMP MVRCONT; and keep looping
+230.  0B0 150001  SHIFTFILL:	SBX# 1; if this isn't the top row, get the number of items in the row above to shift that down one
+231.  0B1 009002  	LDA& ! ROWS
+232.  0B2 110001  	ADX# 1
+233.  0B3 049002  	STA& ! ROWS
+234.  0B4 150001  	SBX# 1; and also zero the row above out
+235.  0B5 000000  	LDA# 0
+236.  0B6 049002  	STA& ! ROWS
+237.  0B7 110001  	ADX# 1; and get back to the current row
+238.  0B8 150001  MVRCONT:	SBX# 1; when we're done loop on to the next one
+239.  0B9 4E20C2  	JOV BLKCONT; if we've gone past zero, move on
+240.  0BA 210000  	CMX# 0; if we're at the top row, also stop here, since its already been cleared out
+241.  0BB 4C20C2  	JLE BLKCONT
+242.  0BC 249002  	TST& ! ROWS; otherwise if it is a real row, check if it's empty
+243.  0BD 4820B8  	JEQ MVRCONT; if it is empty try the next one up
+244.  0BE 402093  	JMP MVROWS; once we find a real row, shift it down
+245.  0BF 00007C  	LDA# BORDER; finally, add the border back to the top row
+246.  0C0 712109  	OUTB $100+LBOUND
+247.  0C1 71211D  	OUTB $100+RBOUND
+248.  0C2 010000  BLKCONT:	LDX# 0; finally loop through the blocks in this piece to shift down the ones that are above the cleared row
+249.  0C3 FFF013  	POPA ; get the cleared row
+250.  0C4 180026  	MUL# 38; use it to calculate the first index of that row for comparison 
+251.  0C5 100100  	ADA# $100
+252.  0C6 209003  BCLOOP:	CMA& ! LOC; compare this block to the first index of the deleted row
+253.  0C7 4B20CD  	JGE BCCONT; if its in that row or beyond, keep looping
+254.  0C8 FFF010  	PSHA ; otherwise hold the row index so we can increment the location of the block by a row
+255.  0C9 009003  	LDA& ! LOC
+256.  0CA 100026  	ADA# 38
+257.  0CB 049003  	STA& ! LOC
+258.  0CC FFF013  	POPA
+259.  0CD 600004  BCCONT:	AOC# 4; finally when that's done, increment the index to keep looping
+260.  0CE 4A20C6  	JLT BCLOOP
+261.  0CF FFF014  CLCONT:	POPX ; once that's all done, check the next block
+262.  0D0 600004  	AOC# 4
+263.  0D1 4A2084  	JLT BLKLOOP
+264.  0D2 FFF014  	POPX ; when all the blocks are done, we can exit
+265.  0D3 FFF013  	POPA
+266.  0D4 690000  	FIN# 0
+267.  0D5 FFF040  	RTN
+268.              
+269.              ; Keyboard Interrupt Service Routine
+270.              ; Arrow keys move pieces left or right, and X and Z rotate clockwise/counterclockwise (everything else does nothing)  
+271.              	.EQU Z, $7A
+272.              	.EQU X, $78
+273.              	.EQU ARROW, $1B; the arrows are a little more complicated
+274.              	.EQU L, $4B
+275.              	.EQU R, $4D
+276.              	.EQU D, $50
+277.              	.EQU U, $48
+278.              
+279.  0D6 680000  KBDISR:	BGN# 0
+280.  0D7 FFF010  	PSHA
+281.  0D8 FFF011  	PSHX
+282.  0D9 FFF012  	PSHF	
+283.  0DA 030000  	LDF# 0; I'm going to be looping using the frame pointer again
+284.  0DB 010000  	LDX# 0; I'm also going to want to start the index at 0 for later
+285.  0DC 702001  	INB KBDDATA; load in the value from the keyboard and check which action it is
+286.  0DD 20007A  	CMA# Z; rotating is just a letter key, so I'll take care of that first, handling left
+287.  0DE 482103  	JEQ ROTL
+288.  0DF 200078  	CMA# X; and right
+289.  0E0 482100  	JEQ ROTR
+290.  0E1 20001B  	CMA# ARROW; arrow commands are going to have to be checked in pieces
+291.  0E2 492133  	JNE KBDONE; if it's none of the valid commands, just call it done
+292.  0E3 702001  	INB KBDDATA; if it's an arrow, check which direction it is
+293.  0E4 20004B  	CMA# L; left
+294.  0E5 4820F4  	JEQ MOVEL
+295.  0E6 20004D  	CMA# R; or right
+296.  0E7 4820F1  	JEQ MOVER;
+297.  0E8 200048  	CMA# U; up is equivalent to rotate clockwise
+298.  0E9 482100  	JEQ ROTR
+299.  0EA 200050  	CMA# D; and down uses the existing movedown function
+300.  0EB 492133  	JNE KBDONE; if its none of the above, just call it done
+301.  0EC 080141  	PSH# CURPIECE
+302.  0ED 080145  	PSH# NEWLOC
+303.  0EE 412043  	JSR MOVEDOWN
+304.  0EF 120002  	ADS# 2
+305.  0F0 402133  	JMP KBDONE; and then call it done
+306.  0F1 000001  MOVER:	LDA# 1; if we're moving right, change the indicator value to 1
+307.  0F2 04213B  	STA DIR
+308.  0F3 4020F7  	JMP MVLOOP
+309.  0F4 000001  MOVEL:	LDA# 1; if we're moving left change the indicator value to -1
+310.  0F5 FFF020  	NEGA
+311.  0F6 04213B  	STA DIR
+312.  0F7 000020  MVLOOP:	LDA# $20; start moving by clearing out the corresponding spot on the display for each block
+313.  0F8 717141  	OUTB* ! CURPIECE
+314.  0F9 003141  	LDA ! CURPIECE; then load in the actual location of that block
+315.  0FA 10213B  	ADA DIR; increment/decrement the location according to which arrow was used and store it
+316.  0FB 043145  	STA ! NEWLOC
+317.  0FC 130001  	ADF# 1; and continue the loop
+318.  0FD 230004  	CMF# 4
+319.  0FE 4A20F7  	JLT MVLOOP
+320.  0FF 40212F  	JMP MOVE
+321.  100 000001  ROTR:	LDA# 1; to rotate right, set the indicator to 1
+322.  101 04213B  	STA DIR
+323.  102 402106  	JMP ROTLOOP
+324.  103 000001  ROTL:	LDA# 1; to rotate left, set the indicator to -1
+325.  104 FFF020  	NEGA
+326.  105 04213B  	STA DIR
+327.  106 000020  ROTLOOP:	LDA# $20; for both directions, start by clearing the current block from the display
+328.  107 717141  	OUTB* ! CURPIECE
+329.  108 003141  	LDA ! CURPIECE; then I'm going to get its coordinates (stored according to the index)
+330.  109 140100  	SBA# $100; first x
+331.  10A 1A0026  	MOD# 38
+332.  10B 04413C  	STA+ RX
+333.  10C 003141  	LDA ! CURPIECE
+334.  10D 140100  	SBA# $100; and then the y
+335.  10E 190026  	DIV# 38
+336.  10F 04413F  	STA+ RY
+337.  110 230000  	CMF# 0; now, if we're at the first piece (the centroid), just store it as is
+338.  111 4D2117  	JGT ROTATE
+339.  112 002141  	LDA CURPIECE
+340.  113 042145  	STA NEWLOC
+341.  114 130001  	ADF# 1; finally, increment the frame pointer and set the index to 1 and loop again
+342.  115 010001  	LDX# 1
+343.  116 402106  	JMP ROTLOOP
+344.  117 010000  ROTATE:	LDX# 0; start actually rotating by calculating the new x and y coordinates based on the centroid
+345.  118 00413C  DIFFLOOP:	LDA+ RX; grab the centroid's coordinate
+346.  119 110001  	ADX# 1
+347.  11A 14413C  	SBA+ RX; subtract the other block's coordinate
+348.  11B 04413C  	STA+ RX; and store the difference in place
+349.  11C 110002  	ADX# 2; and then increment again to do the y coordinates with the same loop
+350.  11D 210005  	CMX# 5
+351.  11E 4A2118  	JLT DIFFLOOP
+352.  11F 002140  	LDA RY+1; now calculate the new x value based on the direction and the centroid
+353.  120 18213B  	MUL DIR
+354.  121 10213C  	ADA RX
+355.  122 04213E  	STA RX+2
+356.  123 00213D  	LDA RX+1; and calculate the new y value (multiplying the x by the oposite sign)
+357.  124 18213B  	MUL DIR
+358.  125 FFF020  	NEGA
+359.  126 10213F  	ADA RY; this leaves the new y in the accumulator
+360.  127 180026  	MUL# 38; which can then be used to calculate the actual index of the block
+361.  128 10213E  	ADA RX+2
+362.  129 100100  	ADA# $100
+363.  12A 043145  	STA ! NEWLOC; now we have the final value to be stored
+364.  12B 010001  	LDX# 1; reset the index register to 1 to store the next block
+365.  12C 130001  	ADF# 1; and continue the loop
+366.  12D 230004  	CMF# 4
+367.  12E 4A2106  	JLT ROTLOOP
+368.  12F 080145  MOVE:	PSH# NEWLOC; once that's done, we can move the pieces accordingly (accounting for collision)
+369.  130 080141  	PSH# CURPIECE
+370.  131 412057  	JSR MOVEPIECE
+371.  132 120002  	ADS# 2
+372.  133 000080  KBDONE:	LDA# INTENBL; once we're done, reset the keyboard with interrupts enabled & a clear buffer
+373.  134 310040  	OR# CLEAR
+374.  135 712000  	OUTB KBDSTAT
+375.  136 FFF015  	POPF
+376.  137 FFF014  	POPX
+377.  138 FFF013  	POPA
+378.  139 690000  	FIN# 0
+379.  13A FFF041  	IRTN
+380.              	
+381.  13B FFFFFF  DIR:	.WORD -1; this is essentially going to act as a boolean so I can toggle between move directions
+382.  13C 000000  RX:	.BLKW 3, 0; for rotating, store the coordinates of the centroid, the other block, and the distance
+383.  13F 000000  RY:	.BLKW 2, 0;
+384.              
+385.  141 000000  CURPIECE:	.BLKW 4, 0; to hold the current location of the piece
+386.  145 000000  NEWLOC:	.BLKW 4, 0; to hold a potential new location for the piece for testing
+387.  149 000000  ROWFILL:	.BLKW 14, 0; to hold the number of blocks in each row
+388.              ; I'm going to store all possible starting pieces for ease of access (with the center block at the front)
+389.  157 000113  IPIECE:	.WORD $113
+390.  158 000111  	.WORD $111
+391.  159 000112  	.WORD $112
+392.  15A 000114  	.WORD $114
+393.  15B 000139  JPIECE:	.WORD $139
+394.  15C 000112  	.WORD $112
+395.  15D 000138  	.WORD $138
+396.  15E 00013A  	.WORD $13A
+397.  15F 000139  LPIECE:	.WORD $139
+398.  160 000114  	.WORD $114
+399.  161 000138  	.WORD $138
+400.  162 00013A  	.WORD $13A
+401.  163 000139  OPIECE:	.WORD $139
+402.  164 000112  	.WORD $112
+403.  165 000113  	.WORD $113
+404.  166 000138  	.WORD $138
+405.  167 000139  TPIECE:	.WORD $139
+406.  168 000113  	.WORD $113
+407.  169 000138  	.WORD $138
+408.  16A 00013A  	.WORD $13A
+409.  16B 000139  SPIECE:	.WORD $139
+410.  16C 000113  	.WORD $113
+411.  16D 000114  	.WORD $114
+412.  16E 000138  	.WORD $138
+413.  16F 000139  ZPIECE:	.WORD $139
+414.  170 000112  	.WORD $112
+415.  171 000113  	.WORD $113
+416.  172 00013A  	.WORD $13A
+417.  173 472041  OVERMSG:	.CHAR 'G A M E  O V E R ', OVERLEN; game over message
+      174 204D20
+      175 452020
+      176 4F2056
+      177 204520
+      178 522020
+418.  179 000001  RANDOM:	.WORD 1; I'm going to use this to go through memory to draw random numbers
+419.              
+420.              	.EQU @, $FF8; set up keyboard interrupts to go to the right function
+421.  FF8 0000D6  	.WORD KBDISR
+422.              
+
+                     SYMBOL TABLE CONTENTS
+
+00001B = ARROW           0000CD = BCCONT          0000C6 = BCLOOP          
+000006 = BELL            0000C2 = BLKCONT         000084 = BLKLOOP         
+000000 = BLOCK           00007C = BORDER          0000CF = CLCONT          
+000040 = CLEAR           000001 = CLRDISP         000080 = CLRROW          
+000073 = COLLISION       00005A = COLLOOP         0000A5 = CONTROW         
+000074 = CPRLOOP         000141 = CURPIECE        000314 = CURSORX         
+000315 = CURSORY         000050 = D               000056 = DCBLK           
+000003 = DCUR            000118 = DIFFLOOP        00013B = DIR             
+000100 = DISPDATA        000317 = DISPOUT         000316 = DISPSTAT        
+000002 = DNEW            00007C = DONE            000046 = DOWNLOOP        
+000038 = GAMEOVER        000080 = INTENBL         000157 = IPIECE          
+00015B = JPIECE          000001 = KBDDATA         0000D6 = KBDISR          
+000133 = KBDONE          000000 = KBDSTAT         00004B = L               
+000009 = LBOUND          000010 = LDSTTMR         000003 = LOC             
+00015F = LPIECE          000042 = MAXTIME         00007F = MCBLK           
+000002 = MCUR            000003 = MNEW            00012F = MOVE            
+000043 = MOVEDOWN        0000F4 = MOVEL           00006A = MOVELOOP        
+000057 = MOVEPIECE       0000F1 = MOVER           0000F7 = MVLOOP          
+0000B8 = MVRCONT         0000AB = MVRFILL         000093 = MVROWS          
+000145 = NEWLOC          00000A = NEWPIECE        000014 = NEWPLOOP        
+000007 = NPIECES         000163 = OPIECE          000011 = OVERLEN         
+00003D = OVERLOOP        000173 = OVERMSG         000033 = PIECEDONE       
+000027 = POLL            00004D = R               000179 = RANDOM          
+00001D = RBOUND          000117 = ROTATE          000103 = ROTL            
+000106 = ROTLOOP         000100 = ROTR            000149 = ROWFILL         
+00009C = ROWLOOP         000002 = ROWS            00013C = RX              
+00013F = RY              000002 = SCROLLDISP      000005 = SETUPLOOP       
+0000B0 = SHIFTFILL       0000A1 = SHIFTROW        00016B = SPIECE          
+000020 = STPTMR          000030 = STRTTMR         000034 = TIMECOUNT       
+000031 = TIMERELD        000022 = TIMERLOOP       000030 = TIMESTAT        
+000167 = TPIECE          000048 = U               000078 = X               
+00007A = Z               00016F = ZPIECE          

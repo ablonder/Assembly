@@ -1,0 +1,29 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.  000 002012  	LDA STARTVAL; initialize the accumulator value (will change at run)
+  2.  001 042010  	STA VAL; store the initial value to return it later
+  3.  002 010017  	LDX# LOOPCOUNT; initialize the index register so we can count down through the accumulator
+  4.  003 FFF022  LOOP:	SHRA ; scootch the accumulator left to get the next bit
+  5.  004 4F2006  	JNO INDEX; if it's a 0, just go straight to taking care of the index register
+  6.  005 1B2011  	INC ONECOUNT; otherwise, add to the counter
+  7.  006 612003  INDEX:	SOJ LOOP; if we're not down to 0 yet, continue the loop
+  8.  007 002011  	LDA ONECOUNT; now that we've counted all the 1's, now it's time to actually check the parity
+  9.  008 1A0002  	MOD# 2; set the EQ flag to 1 if it's even and 0 if it's odd
+ 10.  009 002010  	LDA VAL; now we can put the original value back in the accumulator
+ 11.  00A 49200D  	JNE ODD; use the flag from the modulo to separate out odd and even (handling even first)
+ 12.  00B 302013  	AND MAXVAL; if it's already even, this ensures the first bit is set to 0
+ 13.  00C 40200F  	JMP DONE; now I can just jump to the end
+ 14.  00D 332013  ODD:	COM MAXVAL; otherwise I have to flip my comparison string to a 1 followed by all 0s
+ 15.  00E 312013  	OR MAXVAL; now I can do the comparison, to set the first bit to 1, and leave the rest the same
+ 16.  00F FFFFFF  DONE:	HLT
+ 17.              	.EQU LOOPCOUNT, 23; the number of digits in the accumulator to look at
+ 18.  010 000000  VAL:	.WORD 0; where I'm going to store the original accumulator value
+ 19.  011 000000  ONECOUNT:	.WORD 0; where I'm going to store the total number of 1's
+ 20.  012 654321  STARTVAL:	.WORD $654321; the initial value to put in the accumulator, as a separate variable so I can change it
+ 21.  013 7FFFFF  MAXVAL:	.WORD $7FFFFF; I'm going to want to use this in a few places (and I think values this big can't go in immediate)
+ 22.              
+
+                     SYMBOL TABLE CONTENTS
+
+00000F = DONE            000006 = INDEX           000003 = LOOP            
+000017 = LOOPCOUNT       000013 = MAXVAL          00000D = ODD             
+000011 = ONECOUNT        000012 = STARTVAL        000010 = VAL             

@@ -1,0 +1,51 @@
+	.EQU @, 0
+	.EQU GETSTR, $E04; I'm going to setup the screen using the MINI_OS
+
+MAIN:	LDS# $E00
+	PSH# 500; get in a string that will be echoed onto the screen
+	PSH# STR
+	PSH# STR
+	JSR GETSTR
+	ADS# 3
+	JSR SWAPDISP
+	HLT
+
+; PROCEDURE SWAPDISP
+; swaps the locations of all characters in the current display
+	.EQU DISP, $100; the start of the video display buffer
+	.EQU NCOL, 38; the number of characters in each line (for convenience)
+	.EQU NROW, 14; the number of lines in the display
+	.EQU CURSORX, $314
+
+SWAPDISP:	BGN# 0
+	PSHA
+	PSHX
+	LDX# 0; start the number of rows at 0
+ROWLOOP:	PSHX ; store the current number of rows
+	LDX# 0; restart the index register with the number of items in the row
+INLOOP:	INB& ROWSTART; grab the item at the current location in the row
+	PSHA ; add it to the stack
+	AOC# NCOL; increment the index and check to see if its reached the last column
+	JLT INLOOP; keep going as long as it hasn't
+	LDX# 0; then start again
+OUTLOOP:	POPA ; grab the top item from the stack
+	OUTB& ROWSTART; print it back onto the screen
+	AOC# NCOL; and increment the index to keep looping
+	JLT OUTLOOP
+	LDA ROWSTART; once it's done, we can increment the start of the row
+	ADA# NCOL
+	STA ROWSTART
+	POPX ; and get back the old index to increment it and loop
+	AOC# NROW
+	JLT ROWLOOP
+	INW CURSORX; once that's done, the last thing to do is flip the cursor
+	NEGA
+	ADA# NCOL-1
+	OUTW CURSORX
+	POPX
+	POPA
+	FIN# 0
+	RTN
+
+ROWSTART:	.WORD $100; to hold the starting address in the display of the current row
+STR:	.WORD 0; a filler location to hold the string that's going on the screen

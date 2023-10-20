@@ -1,0 +1,44 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              	.EQU @, $000; sets the starting location (opposite the stack)
+  2.              	.EQU GETNUM, $E01; function to get numerical keyboard input
+  3.              	.EQU PUTSTR, $E05; function to print string output
+  4.              	.EQU PUTNL, $E06; function for printing a newline
+  5.  000 020E00  	LDS# $E00; sets up the stack to use the MINI_IOS
+  6.  001 08001A  INLOOP:	PSH# QLEN; start by preparing to print out the query (load its length onto the stack)
+  7.  002 080015  	PSH# QUERY; and load the query itself
+  8.  003 412E05  	JSR PUTSTR; actually print it out
+  9.  004 120002  	ADS# 2; and back up the stack
+ 10.  005 412E01  	JSR GETNUM; then get keyboard input
+ 11.  006 200000  	CMA# 0; check if it's 0
+ 12.  007 482014  	JEQ DONE; if it's 0, then halt the program
+ 13.  008 010017  	LDX# 23; reload index register to countdown
+ 14.  009 080001  OUTLOOP:	PSH# 1; in any case, the string will have a length of 1, so start there 
+ 15.  00A FFF023  	SHLA ; then check the next bit in the number
+ 16.  00B 4E200E  	JOV ONE; if it's a one, jump, otherwise print a 0
+ 17.  00C 08001F  	PSH# OUTZERO; add the zero to the stack
+ 18.  00D 40200F  	JMP PRINT; then jump to printing
+ 19.  00E 08001E  ONE:	PSH# OUTONE; otherwise, add a one to the stack
+ 20.  00F 412E05  PRINT:	JSR PUTSTR; run the print subroutine
+ 21.  010 120002  	ADS# 2; fixes the stack pointer
+ 22.  011 612009  	SOJ OUTLOOP; decrements the index register and jumps if it's not at 0
+ 23.  012 412E06  	JSR PUTNL; if it's done printing out this number, make a new line
+ 24.  013 402001  	JMP INLOOP; and continue the input loop
+ 25.  014 FFFFFF  DONE:	HLT
+ 26.  015 456E74  QUERY:	.CHAR 'Enter a number (0 to quit)', QLEN; defines query string
+      016 657220
+      017 61206E
+      018 756D62
+      019 657220
+      01A 283020
+      01B 746F20
+      01C 717569
+      01D 742920
+ 27.  01E 312020  OUTONE:	.CHAR '1'; to print out a 1
+ 28.  01F 302020  OUTZERO:	.CHAR '0'; to print out a 0
+
+                     SYMBOL TABLE CONTENTS
+
+000014 = DONE            000E01 = GETNUM          000001 = INLOOP          
+00000E = ONE             000009 = OUTLOOP         00001E = OUTONE          
+00001F = OUTZERO         00000F = PRINT           000E06 = PUTNL           
+000E05 = PUTSTR          00001A = QLEN            000015 = QUERY           

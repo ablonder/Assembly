@@ -1,0 +1,28 @@
+	.EQU @, 0
+	.EQU KBDSTAT, $000; to access the keyboard directly
+	.EQU KBDDATA, $001
+	.EQU DISPSTAT, $316
+	.EQU DISPDATA, $317
+
+MAIN:	LDS# $E00
+	LDA# $80; set interrupts enabled on the keyboard
+	OUTB KBDSTAT
+	SIE ; and set the interrupt enable flag
+NOPLOOP:	NOP ; now we just hang around and wait for interrupts
+	JMP NOPLOOP
+
+; keyboard interrupt procedure to get the input and add 2
+KBDINT:	BGN# 0
+	PSHA
+	INW KBDDATA; actually get the data from the keyboard
+	ADA TWO; add 2 to the character
+	OUTW DISPDATA; and give it back to the keyboard
+	LDA# $C0; I'm going to try clearing the keyboard buffer when done
+	OUTB KBDSTAT
+	POPA
+	FIN# 0
+	IRTN
+TWO:	.WORD $020000; has to be stored in memory because it's too big for immediate
+
+	.EQU @, $FF8; to set up the right location in the interrupt vector
+	.WORD KBDINT

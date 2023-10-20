@@ -1,0 +1,171 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              	.EQU GETNUM, $E01; input and output functions in the MINI_OS
+  2.              	.EQU PUTNUM, $E00
+  3.              	.EQU PUTSTR, $E05
+  4.              	.EQU PUTNL, $E06
+  5.              	.EQU MAXLEN, 20; store maximum array length (I guess that's hardcoded for now)
+  6.  000 020E00  	LDS# $E00; initialize the stack for use
+  7.  001 08007F  	PSH# ARRAY; push variables onto the stack for the function call
+  8.  002 08007E  	PSH# ARRLEN
+  9.  003 080014  	PSH# MAXLEN
+ 10.  004 412013  	JSR LOAD; load up the array with values
+ 11.  005 120002  	ADS# 2; I don't need the max length for the MIN function
+ 12.  006 1C207E  	DEC ARRLEN; and I want to decrement the array length for looping
+ 13.  007 08207E  	PSH ARRLEN; then I can give the length to the MIN function directly
+ 14.  008 010000  	LDX# 0; now I start from the beginning of the array
+ 15.  009 FFF011  MINLOOP:	PSHX ; push the new starting index
+ 16.  00A 412038  	JSR MIN; and move the minimum value to the front
+ 17.  00B 120001  	ADS# 1; remove the latest index from the stack
+ 18.  00C 60207E  	AOC ARRLEN; check if we've gone through the whole array
+ 19.  00D 4A2009  	JLT MINLOOP; if not, keep going
+ 20.  00E FFF013  	POPA ; grab the array length again for printing
+ 21.  00F 100001  	ADA# 1; add 1 to it so it's back to being the actual length
+ 22.  010 FFF010  	PSHA ; and put it back on the stack for use by the print function
+ 23.  011 412051  	JSR PRINT; when sorted, print out the final array
+ 24.  012 FFFFFF  	HLT
+ 25.              
+ 26.              ; PROCEDURE LOAD(VAR DATA:INTEGER_ARRAY, VAR N:INTEGER, MAX_N:INTEGER)
+ 27.              ; Get number of values (up to a given max) and store them in the given array
+ 28.              	.EQU LDATA, 4; locations on the stack of the parameters
+ 29.              	.EQU N, 3
+ 30.              	.EQU MAX_N, 2
+ 31.              
+ 32.  013 680000  LOAD:	BGN# 0; initializes the function by moving stack and frame pointers around
+ 33.  014 FFF010  	PSHA ; save registers for calling print subroutine
+ 34.  015 FFF011  	PSHX
+ 35.  016 080012  INLOOP:	PSH# NQLEN; load parameters onto stack for print subroutine 
+ 36.  017 08005D  	PSH# NQUERY
+ 37.  018 412E05  	JSR PUTSTR; print out query
+ 38.  019 120002  	ADS# 2; clean up
+ 39.  01A 412E01  	JSR GETNUM; get number of values from the keyboard
+ 40.  01B 200000  	CMA# 0; check if it's less than 0
+ 41.  01C 4D2023  	JGT HIGHCHECK; if it's greater than 0, go ahead
+ 42.  01D 080021  	PSH# LOWELEN; if not, print an errror message
+ 43.  01E 080063  	PSH# LOWERROR
+ 44.  01F 412E05  	JSR PUTSTR
+ 45.  020 120002  	ADS# 2
+ 46.  021 412E06  	JSR PUTNL
+ 47.  022 402016  	JMP INLOOP; and try again
+ 48.  023 203002  HIGHCHECK:	CMA ! MAX_N; then check if it's greater than the max
+ 49.  024 4C202A  	JLE GETVALS; if it's okay, go ahead
+ 50.  025 080024  	PSH# HIGHELEN; if not, print an error message
+ 51.  026 08006E  	PSH# HIGHERROR
+ 52.  027 412E05  	JSR PUTSTR
+ 53.  028 120002  	ADS# 2
+ 54.  029 412E06  	JSR PUTNL
+ 55.  02A 047003  GETVALS:	STA* ! N; once there's a valid number, store it
+ 56.  02B 010000  	LDX# 0; load the index array for loading the array
+ 57.  02C 08000A  VALLOOP:	PSH# QLEN; print out the query message
+ 58.  02D 08007A  	PSH# QUERY
+ 59.  02E 412E05  	JSR PUTSTR
+ 60.  02F 120002  	ADS# 2
+ 61.  030 412E01  	JSR GETNUM; get value from keyboard
+ 62.  031 049004  	STA& ! LDATA; load it into the data array (hopefully at the right location)
+ 63.  032 607003  	AOC* ! N; loop again if the index register is less than the number of values
+ 64.  033 4A202C  	JLT VALLOOP
+ 65.  034 FFF014  	POPX ; reset registers and return to the calling function
+ 66.  035 FFF013  	POPA
+ 67.  036 690000  	FIN# 0
+ 68.  037 FFF040  	RTN
+ 69.              
+ 70.              ; PRROCEDURE MIN(VAR DATA: INT_ARRAY, LAST: STOP_ADDRESS, FIRST: START_ADDRESS)
+ 71.              ; Go through the designated segment of the array and find the min value and move it to the front
+ 72.              	.EQU MDATA, 4; set up local parameters
+ 73.              	.EQU LAST, 3
+ 74.              	.EQU FIRST, 2
+ 75.              
+ 76.  038 680000  MIN:	BGN# 0; set up the subroutine
+ 77.  039 FFF010  	PSHA
+ 78.  03A FFF011  	PSHX
+ 79.  03B 013002  	LDX ! FIRST; load up the starting index into the index register
+ 80.  03C 213003  	CMX ! LAST; check if the first and last index are the same (for good hygine)
+ 81.  03D 4B204C  	JGE DONE; and if so, just leave things as they are
+ 82.  03E 052050  	STX MINDEX; otherwise, save that index as our initial minimum
+ 83.  03F 009004  	LDA& ! MDATA; and put the corresponding value in the accumulator
+ 84.  040 110001  	ADX# 1; add 1 to the index array to start comparing
+ 85.  041 209004  MLOOP:	CMA& ! MDATA; compare the current min value to the next item in the array
+ 86.  042 4A2045  	JLT CONTLOOP; if the accumulator already has the lower value, keep going
+ 87.  043 052050  	STX MINDEX; otherwise store the new lowest index and value
+ 88.  044 009004  	LDA& ! MDATA
+ 89.  045 603003  CONTLOOP:	AOC ! LAST; check if it's reached the last index
+ 90.  046 4C2041  	JLE MLOOP; if not, loop again
+ 91.  047 013002  	LDX ! FIRST; now that we've found the lowest value, get back the starting index
+ 92.  048 089004  	PSH& ! MDATA; store the value of the first item in the list onto the stack
+ 93.  049 049004  	STA& ! MDATA; and put the lowest value there
+ 94.  04A 012050  	LDX MINDEX; then get the index that held the lowest value
+ 95.  04B 099004  	POP& ! MDATA; and put the value that was at the front of the list there
+ 96.  04C FFF014  DONE:	POPX ; now we can wrap up the function
+ 97.  04D FFF013  	POPA
+ 98.  04E 690000  	FIN# 0
+ 99.  04F FFF040  	RTN
+100.  050 000000  MINDEX:	.WORD 0; to store the index of the minimum value for swapping
+101.              
+102.              ; PROCEDURE PRINT(VAR DATA:INTEGER_ARRAY, N:INTEGER)
+103.              ; Prints out the given array
+104.              	.EQU PDATA, 3
+105.              	.EQU PN, 2
+106.              
+107.  051 680000  PRINT:	BGN# 0
+108.  052 FFF010  	PSHA
+109.  053 FFF011  	PSHX
+110.  054 010000  	LDX# 0; start the index register at 0
+111.  055 009003  PLOOP:	LDA& ! PDATA; grab the current item of the array
+112.  056 412E00  	JSR PUTNUM; print it out
+113.  057 603002  	AOC ! PN; increment and check the index
+114.  058 4A2055  	JLT PLOOP; if it's less than the length of the array, go again
+115.  059 FFF014  	POPX ; I think that's it
+116.  05A FFF013  	POPA
+117.  05B 690000  	FIN# 0
+118.  05C FFF040  	RTN
+119.              
+120.  05D 4E756D  NQUERY:	.CHAR 'Number of elements', NQLEN; set up strings for printing
+      05E 626572
+      05F 206F66
+      060 20656C
+      061 656D65
+      062 6E7473
+121.  063 4D7573  LOWERROR:	.CHAR 'Must be greater than 0, try again', LOWELEN
+      064 742062
+      065 652067
+      066 726561
+      067 746572
+      068 207468
+      069 616E20
+      06A 302C20
+      06B 747279
+      06C 206167
+      06D 61696E
+122.  06E 4D7573  HIGHERROR:	.CHAR 'Must be less than the max, try again', HIGHELEN
+      06F 742062
+      070 65206C
+      071 657373
+      072 207468
+      073 616E20
+      074 746865
+      075 206D61
+      076 782C20
+      077 747279
+      078 206167
+      079 61696E
+123.  07A 456E74  QUERY:	.CHAR 'Enter data', QLEN
+      07B 657220
+      07C 646174
+      07D 612020
+124.              
+125.  07E 000000  ARRLEN:	.WORD 0; variables for the main function
+126.  07F 000000  ARRAY:	.BLKW 20, 0
+
+                     SYMBOL TABLE CONTENTS
+
+00007F = ARRAY           00007E = ARRLEN          000045 = CONTLOOP        
+00004C = DONE            000002 = FIRST           000E01 = GETNUM          
+00002A = GETVALS         000023 = HIGHCHECK       000024 = HIGHELEN        
+00006E = HIGHERROR       000016 = INLOOP          000003 = LAST            
+000004 = LDATA           000013 = LOAD            000021 = LOWELEN         
+000063 = LOWERROR        000014 = MAXLEN          000002 = MAX_N           
+000004 = MDATA           000038 = MIN             000050 = MINDEX          
+000009 = MINLOOP         000041 = MLOOP           000003 = N               
+000012 = NQLEN           00005D = NQUERY          000003 = PDATA           
+000055 = PLOOP           000002 = PN              000051 = PRINT           
+000E06 = PUTNL           000E00 = PUTNUM          000E05 = PUTSTR          
+00000A = QLEN            00007A = QUERY           00002C = VALLOOP         

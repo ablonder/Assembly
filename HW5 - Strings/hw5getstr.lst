@@ -1,0 +1,88 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              	.EQU @, $000
+  2.              	.EQU KBDSTAT, $000
+  3.              	.EQU KBDDATA, $001
+  4.              	.EQU DISPSTAT, $316
+  5.              	.EQU DISPDATA, $317
+  6.              	.EQU CURSORX, $314
+  7.              	.EQU MAXSTRLEN, 20
+  8.              
+  9.  000 020E00  MAIN:	LDS# $E00
+ 10.  001 080014  	PSH# MAXSTRLEN; go get a string!
+ 11.  002 080035  	PSH# STR
+ 12.  003 080034  	PSH# STRLEN
+ 13.  004 412007  	JSR GETSTR
+ 14.  005 120003  	ADS# 3
+ 15.  006 FFFFFF  	HLT
+ 16.              	
+ 17.              
+ 18.              ; PROCEDURE GETSTR(MAX_CHARS:INTEGER, VAR STRING:CHAR_STRING, VAR ACTUAL:INTEGER)
+ 19.              ; Gets a string from the keyboard, echoes it on the display, and stores it to the location given
+ 20.              	.EQU ACTUALEN, 2
+ 21.              	.EQU STRING, 3
+ 22.              	.EQU MAXCHRS, 4
+ 23.              
+ 24.              	.EQU COLON, $3A; the ascii for some particular relevent characters
+ 25.              	.EQU ENTER, $D
+ 26.              	.EQU BACK, 8; a normal backspace (which I think I need to catch manually)
+ 27.              	.EQU CLR, $3C; this is actually '<'
+ 28.              
+ 29.  007 680000  GETSTR:	BGN# 0
+ 30.  008 FFF010  	PSHA
+ 31.  009 FFF011  	PSHX
+ 32.  00A 00003A  	LDA# COLON; first print out a colon (our query character)
+ 33.  00B 712317  	OUTB DISPDATA; I think this will all be easiest to handle as bytes
+ 34.  00C 010000  	LDX# 0; set the index to 0
+ 35.  00D 702000  POLL:	INB KBDSTAT; check the keyboard for input until there's something there (top bit high)
+ 36.  00E 4B200D  	JGE POLL
+ 37.  00F 702001  	INB KBDDATA; once there's something there, grab it
+ 38.  010 20000D  	CMA# ENTER; first check if its a return (if so, the entry is done)
+ 39.  011 48202D  	JEQ DONE
+ 40.  012 200008  	CMA# BACK; and check to see if its a normal backspace
+ 41.  013 482022  	JEQ DEL
+ 42.  014 20003C  	CMA# CLR; also check if its a <, which here means clear the line
+ 43.  015 492029  	JNE STORE; if not, go on to store (and print) the string
+ 44.  016 000001  	LDA# 1; if a clear has been hit, clear the display
+ 45.  017 712316  	OUTB DISPSTAT
+ 46.  018 00003A  	LDA# COLON; print back out a colon
+ 47.  019 712317  	OUTB DISPDATA
+ 48.  01A FFF003  	TXA ; divide the index by 3 to more efficiently clear out the string from memory
+ 49.  01B 190003  	DIV# 3
+ 50.  01C FFF000  	TAX ; put it back in the index register
+ 51.  01D 000000  	LDA# 0; set the index register to zero everything out
+ 52.  01E 049003  CLEAR:	STA& ! STRING; fill the current part of the string with 0s
+ 53.  01F 61201E  	SOJ CLEAR; subtract from the index register until it's down to 0
+ 54.  020 010000  	LDX# 0; get it actually back to 0 (because I think it goes around to -1)
+ 55.  021 40200D  	JMP POLL; then resume polling
+ 56.  022 150001  DEL:	SBX# 1; to delete a character, decrement the index register
+ 57.  023 000000  	LDA# 0; load the accumulator with a zero to zero out that spot in memory
+ 58.  024 517003  	STC* ! STRING
+ 59.  025 702314  	INB CURSORX; get the current location of the cursor
+ 60.  026 140001  	SBA# 1; decrement it
+ 61.  027 712314  	OUTB CURSORX; and put the cursor there (back one spot)
+ 62.  028 40200D  	JMP POLL; and then resume polling
+ 63.  029 712317  STORE:	OUTB DISPDATA; if it's not any of the special characters, we can print it out
+ 64.  02A 517003  	STC* ! STRING; and store it in the string
+ 65.  02B 603004  	AOC ! MAXCHRS; and then increment the length of the string and compare it to the max
+ 66.  02C 4A200D  	JLT POLL; if it's still under the max, go back to polling
+ 67.  02D 000005  DONE:	LDA# 5; when the input is done, create a new line
+ 68.  02E 712316  	OUTB DISPSTAT
+ 69.  02F 057002  	STX* ! 2; store the current index as the actual length of the string
+ 70.  030 FFF014  	POPX ; and then wrap up the function
+ 71.  031 FFF013  	POPA
+ 72.  032 690000  	FIN# 0
+ 73.  033 FFF040  	RTN
+ 74.              
+ 75.  034 000000  STRLEN:	.WORD 0; the actual length of the string
+ 76.  035 000000  STR:	.BLKW MAXSTRLEN, 0; to store the actual string (with a set length this time)
+
+                     SYMBOL TABLE CONTENTS
+
+000002 = ACTUALEN        000008 = BACK            00001E = CLEAR           
+00003C = CLR             00003A = COLON           000314 = CURSORX         
+000022 = DEL             000317 = DISPDATA        000316 = DISPSTAT        
+00002D = DONE            00000D = ENTER           000007 = GETSTR          
+000001 = KBDDATA         000000 = KBDSTAT         000000 = MAIN            
+000004 = MAXCHRS         000014 = MAXSTRLEN       00000D = POLL            
+000029 = STORE           000035 = STR             000003 = STRING          
+000034 = STRLEN          

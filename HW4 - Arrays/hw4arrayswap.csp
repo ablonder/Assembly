@@ -1,0 +1,53 @@
+	.EQU @, $000; sets the starting location for the code
+	.EQU GETNUM, $E01; location of function to get numerical input from the keyboard
+	.EQU PUTNUM, $E00; location of function to print out numbers
+	.EQU PUTSTR, $E05; location of function to print out strings
+	.EQU PUTNL, $E06; location of function to print out a new line
+	LDS# $E00; sets up the stack to use the MINI_OS
+INLOOP:	PSH# QLEN; set up the stack to print out the query
+	PSH# QUERY;
+	JSR PUTSTR; print out the query
+	ADS# 2; reset the stack
+	JSR GETNUM; get a number from the keyboard
+	CMA# 0; if it's less than 0, just halt
+	JLE DONE
+	CMA# 20; otherwise, confirm that the length is less than 20
+	JLE GETARR; if it's less than 20, go fill up the array
+	PSH# ELEN; otherwise, print out an error message
+	PSH# ERROR;
+	JSR PUTSTR;
+	ADS# 2;
+	JSR PUTNL; put down a new line
+	JMP INLOOP; and try again
+GETARR:	STA ARRLEN; save the array length in memory
+	LDX# 0; initialize the index register to 0 for looping
+NUMLOOP:	JSR GETNUM; get a number from the keyboard
+	STA+ ARRAY; store it at the corresponding location in the array
+	AOC ARRLEN; increment the index register and compare to the desired array length
+	JLT NUMLOOP; if we haven't filled the array yet, keep going
+	PSH# OLEN; otherwise, print the output message
+	PSH# OUTPUT;
+	JSR PUTSTR;
+	ADS# 2;
+	JSR PUTNL;
+	LDX# 0; reset the index register to go through the array from the top
+LOADLOOP:	PSH+ ARRAY; load the array into the stack
+	AOC ARRLEN
+	JLT LOADLOOP
+	LDX# 0; reset the index back to 0
+UNLOADLOOP:	POPA ; I'm going to try unloading to the accumulator
+	STA+ ARRAY; and then store it in the array
+	AOC ARRLEN
+	JLT UNLOADLOOP
+	LDX# 0; reset index register again
+PRINTLOOP:	LDA+ ARRAY; print out the items of the new re-ordered array
+	JSR PUTNUM
+	AOC ARRLEN
+	JLT PRINTLOOP
+	JMP INLOOP; when done, go back to get input
+DONE:	HLT
+QUERY:	.CHAR 'Enter size of array (max 20)', QLEN; sets up input query for printing
+ERROR:	.CHAR 'invalid size!', ELEN; sets up error for printing
+OUTPUT:	.CHAR 'The array in reverse order is', OLEN; sets up output message
+ARRAY:	.BLKW 20, 0; initialize array to the maximum length of 20
+ARRLEN:	.WORD 0; store the actual length of the array

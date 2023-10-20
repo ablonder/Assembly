@@ -1,0 +1,8 @@
+for bit in (val < most significant):
+	if 1:
+		add to count
+if count % 2 == 1:
+	set most significant bit to 1
+else:
+	set most significant bit to 0
+HLT

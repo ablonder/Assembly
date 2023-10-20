@@ -1,0 +1,126 @@
+	.EQU GETNUM, $E01; input and output functions in the MINI_OS
+	.EQU PUTNUM, $E00
+	.EQU PUTSTR, $E05
+	.EQU PUTNL, $E06
+	.EQU MAXLEN, 20; store maximum array length (I guess that's hardcoded for now)
+	LDS# $E00; initialize the stack for use
+	PSH# ARRAY; push variables onto the stack for the function call
+	PSH# ARRLEN
+	PSH# MAXLEN
+	JSR LOAD; load up the array with values
+	ADS# 2; I don't need the max length for the MIN function
+	DEC ARRLEN; and I want to decrement the array length for looping
+	PSH ARRLEN; then I can give the length to the MIN function directly
+	LDX# 0; now I start from the beginning of the array
+MINLOOP:	PSHX ; push the new starting index
+	JSR MIN; and move the minimum value to the front
+	ADS# 1; remove the latest index from the stack
+	AOC ARRLEN; check if we've gone through the whole array
+	JLT MINLOOP; if not, keep going
+	POPA ; grab the array length again for printing
+	ADA# 1; add 1 to it so it's back to being the actual length
+	PSHA ; and put it back on the stack for use by the print function
+	JSR PRINT; when sorted, print out the final array
+	HLT
+
+; PROCEDURE LOAD(VAR DATA:INTEGER_ARRAY, VAR N:INTEGER, MAX_N:INTEGER)
+; Get number of values (up to a given max) and store them in the given array
+	.EQU LDATA, 4; locations on the stack of the parameters
+	.EQU N, 3
+	.EQU MAX_N, 2
+
+LOAD:	BGN# 0; initializes the function by moving stack and frame pointers around
+	PSHA ; save registers for calling print subroutine
+	PSHX
+INLOOP:	PSH# NQLEN; load parameters onto stack for print subroutine 
+	PSH# NQUERY
+	JSR PUTSTR; print out query
+	ADS# 2; clean up
+	JSR GETNUM; get number of values from the keyboard
+	CMA# 0; check if it's less than 0
+	JGT HIGHCHECK; if it's greater than 0, go ahead
+	PSH# LOWELEN; if not, print an errror message
+	PSH# LOWERROR
+	JSR PUTSTR
+	ADS# 2
+	JSR PUTNL
+	JMP INLOOP; and try again
+HIGHCHECK:	CMA ! MAX_N; then check if it's greater than the max
+	JLE GETVALS; if it's okay, go ahead
+	PSH# HIGHELEN; if not, print an error message
+	PSH# HIGHERROR
+	JSR PUTSTR
+	ADS# 2
+	JSR PUTNL
+GETVALS:	STA* ! N; once there's a valid number, store it
+	LDX# 0; load the index array for loading the array
+VALLOOP:	PSH# QLEN; print out the query message
+	PSH# QUERY
+	JSR PUTSTR
+	ADS# 2
+	JSR GETNUM; get value from keyboard
+	STA& ! LDATA; load it into the data array (hopefully at the right location)
+	AOC* ! N; loop again if the index register is less than the number of values
+	JLT VALLOOP
+	POPX ; reset registers and return to the calling function
+	POPA
+	FIN# 0
+	RTN
+
+; PRROCEDURE MIN(VAR DATA: INT_ARRAY, LAST: STOP_ADDRESS, FIRST: START_ADDRESS)
+; Go through the designated segment of the array and find the min value and move it to the front
+	.EQU MDATA, 4; set up local parameters
+	.EQU LAST, 3
+	.EQU FIRST, 2
+
+MIN:	BGN# 0; set up the subroutine
+	PSHA
+	PSHX
+	LDX ! FIRST; load up the starting index into the index register
+	CMX ! LAST; check if the first and last index are the same (for good hygine)
+	JGE DONE; and if so, just leave things as they are
+	STX MINDEX; otherwise, save that index as our initial minimum
+	LDA& ! MDATA; and put the corresponding value in the accumulator
+	ADX# 1; add 1 to the index array to start comparing
+MLOOP:	CMA& ! MDATA; compare the current min value to the next item in the array
+	JLT CONTLOOP; if the accumulator already has the lower value, keep going
+	STX MINDEX; otherwise store the new lowest index and value
+	LDA& ! MDATA
+CONTLOOP:	AOC ! LAST; check if it's reached the last index
+	JLE MLOOP; if not, loop again
+	LDX ! FIRST; now that we've found the lowest value, get back the starting index
+	PSH& ! MDATA; store the value of the first item in the list onto the stack
+	STA& ! MDATA; and put the lowest value there
+	LDX MINDEX; then get the index that held the lowest value
+	POP& ! MDATA; and put the value that was at the front of the list there
+DONE:	POPX ; now we can wrap up the function
+	POPA
+	FIN# 0
+	RTN
+MINDEX:	.WORD 0; to store the index of the minimum value for swapping
+
+; PROCEDURE PRINT(VAR DATA:INTEGER_ARRAY, N:INTEGER)
+; Prints out the given array
+	.EQU PDATA, 3
+	.EQU PN, 2
+
+PRINT:	BGN# 0
+	PSHA
+	PSHX
+	LDX# 0; start the index register at 0
+PLOOP:	LDA& ! PDATA; grab the current item of the array
+	JSR PUTNUM; print it out
+	AOC ! PN; increment and check the index
+	JLT PLOOP; if it's less than the length of the array, go again
+	POPX ; I think that's it
+	POPA
+	FIN# 0
+	RTN
+
+NQUERY:	.CHAR 'Number of elements', NQLEN; set up strings for printing
+LOWERROR:	.CHAR 'Must be greater than 0, try again', LOWELEN
+HIGHERROR:	.CHAR 'Must be less than the max, try again', HIGHELEN
+QUERY:	.CHAR 'Enter data', QLEN
+
+ARRLEN:	.WORD 0; variables for the main function
+ARRAY:	.BLKW 20, 0

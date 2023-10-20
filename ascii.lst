@@ -1,0 +1,17 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              ; prints out all characters in order by ascii value
+  2.              
+  3.              	.EQU @, 0
+  4.              	.EQU DISPOUT, $317
+  5.              
+  6.  000 020E00  	LDS# $E00
+  7.  001 000000  	LDA# 0
+  8.  002 712317  LOOP:	OUTB DISPOUT
+  9.  003 100001  	ADA# 1
+ 10.  004 2000FF  	CMA# $FF
+ 11.  005 4A2002  	JLT LOOP
+ 12.  006 FFFFFF  	HLT
+
+                     SYMBOL TABLE CONTENTS
+
+000317 = DISPOUT         000002 = LOOP            

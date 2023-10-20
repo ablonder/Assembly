@@ -1,0 +1,76 @@
+	.EQU @, $000
+	.EQU KBDSTAT, $000
+	.EQU KBDDATA, $001
+	.EQU DISPSTAT, $316
+	.EQU DISPDATA, $317
+	.EQU CURSORX, $314
+	.EQU MAXSTRLEN, 20
+
+MAIN:	LDS# $E00
+	PSH# MAXSTRLEN; go get a string!
+	PSH# STR
+	PSH# STRLEN
+	JSR GETSTR
+	ADS# 3
+	HLT
+	
+
+; PROCEDURE GETSTR(MAX_CHARS:INTEGER, VAR STRING:CHAR_STRING, VAR ACTUAL:INTEGER)
+; Gets a string from the keyboard, echoes it on the display, and stores it to the location given
+	.EQU ACTUALEN, 2
+	.EQU STRING, 3
+	.EQU MAXCHRS, 4
+
+	.EQU COLON, $3A; the ascii for some particular relevent characters
+	.EQU ENTER, $D
+	.EQU BACK, 8; a normal backspace (which I think I need to catch manually)
+	.EQU CLR, $3C; this is actually '<'
+
+GETSTR:	BGN# 0
+	PSHA
+	PSHX
+	LDA# COLON; first print out a colon (our query character)
+	OUTB DISPDATA; I think this will all be easiest to handle as bytes
+	LDX# 0; set the index to 0
+POLL:	INB KBDSTAT; check the keyboard for input until there's something there (top bit high)
+	JGE POLL
+	INB KBDDATA; once there's something there, grab it
+	CMA# ENTER; first check if its a return (if so, the entry is done)
+	JEQ DONE
+	CMA# BACK; and check to see if its a normal backspace
+	JEQ DEL
+	CMA# CLR; also check if its a <, which here means clear the line
+	JNE STORE; if not, go on to store (and print) the string
+	LDA# 1; if a clear has been hit, clear the display
+	OUTB DISPSTAT
+	LDA# COLON; print back out a colon
+	OUTB DISPDATA
+	TXA ; divide the index by 3 to more efficiently clear out the string from memory
+	DIV# 3
+	TAX ; put it back in the index register
+	LDA# 0; set the index register to zero everything out
+CLEAR:	STA& ! STRING; fill the current part of the string with 0s
+	SOJ CLEAR; subtract from the index register until it's down to 0
+	LDX# 0; get it actually back to 0 (because I think it goes around to -1)
+	JMP POLL; then resume polling
+DEL:	SBX# 1; to delete a character, decrement the index register
+	LDA# 0; load the accumulator with a zero to zero out that spot in memory
+	STC* ! STRING
+	INB CURSORX; get the current location of the cursor
+	SBA# 1; decrement it
+	OUTB CURSORX; and put the cursor there (back one spot)
+	JMP POLL; and then resume polling
+STORE:	OUTB DISPDATA; if it's not any of the special characters, we can print it out
+	STC* ! STRING; and store it in the string
+	AOC ! MAXCHRS; and then increment the length of the string and compare it to the max
+	JLT POLL; if it's still under the max, go back to polling
+DONE:	LDA# 5; when the input is done, create a new line
+	OUTB DISPSTAT
+	STX* ! 2; store the current index as the actual length of the string
+	POPX ; and then wrap up the function
+	POPA
+	FIN# 0
+	RTN
+
+STRLEN:	.WORD 0; the actual length of the string
+STR:	.BLKW MAXSTRLEN, 0; to store the actual string (with a set length this time)

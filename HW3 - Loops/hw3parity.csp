@@ -1,0 +1,21 @@
+	LDA STARTVAL; initialize the accumulator value (will change at run)
+	STA VAL; store the initial value to return it later
+	LDX# LOOPCOUNT; initialize the index register so we can count down through the accumulator
+LOOP:	SHRA ; scootch the accumulator left to get the next bit
+	JNO INDEX; if it's a 0, just go straight to taking care of the index register
+	INC ONECOUNT; otherwise, add to the counter
+INDEX:	SOJ LOOP; if we're not down to 0 yet, continue the loop
+	LDA ONECOUNT; now that we've counted all the 1's, now it's time to actually check the parity
+	MOD# 2; set the EQ flag to 1 if it's even and 0 if it's odd
+	LDA VAL; now we can put the original value back in the accumulator
+	JNE ODD; use the flag from the modulo to separate out odd and even (handling even first)
+	AND MAXVAL; if it's already even, this ensures the first bit is set to 0
+	JMP DONE; now I can just jump to the end
+ODD:	COM MAXVAL; otherwise I have to flip my comparison string to a 1 followed by all 0s
+	OR MAXVAL; now I can do the comparison, to set the first bit to 1, and leave the rest the same
+DONE:	HLT
+	.EQU LOOPCOUNT, 23; the number of digits in the accumulator to look at
+VAL:	.WORD 0; where I'm going to store the original accumulator value
+ONECOUNT:	.WORD 0; where I'm going to store the total number of 1's
+STARTVAL:	.WORD $654321; the initial value to put in the accumulator, as a separate variable so I can change it
+MAXVAL:	.WORD $7FFFFF; I'm going to want to use this in a few places (and I think values this big can't go in immediate)

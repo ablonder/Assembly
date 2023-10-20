@@ -1,0 +1,18 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.  000 002008          LDA     $008; 000 load accumulator with value at 008
+  2.  001 202009          CMA     $009; 001 compare accumulator with value at 009
+  3.  002 4A2006          JLT     $006; 002 jump to 006 if the less than flag is on
+  4.  003 002009          LDA     $009; 003 load accumulator with value at 009
+  5.  004 04200A          STA     $00A; 004 store value in accumulator at 00A
+  6.  005 402007          JMP     $007; 005 jump to 007
+  7.  006 04200A          STA     $00A; 006 store value in accumulator at 00A
+  8.  007 FFFFFF          HLT	; 007 halt
+  9.  008 00000F  X:      .WORD   15; 008 store the value 15 here and label it as X
+ 10.  009 000019  Y:      .WORD   25; 009 store the value 25 here and label it as Y
+ 11.  00A 000000  R:      .WORD   0; 00A store the value 0 here and label it as R
+ 12.                      .END
+ 13.              
+
+                     SYMBOL TABLE CONTENTS
+
+00000A = R               000008 = X               000009 = Y               

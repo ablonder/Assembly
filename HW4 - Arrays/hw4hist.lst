@@ -1,0 +1,179 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              	.EQU @, $000; set the starting location
+  2.              	.EQU GETNUM, $E01
+  3.              	.EQU PUTNUM, $E00
+  4.              	.EQU PUTSTR, $E05
+  5.              	.EQU PUTNL, $E06
+  6.              	.EQU MODES, 10
+  7.              
+  8.  000 020E00  MAIN:	LDS# $E00; set up the stack
+  9.  001 08002E  	PSH# DATA; put the results array on the stack for the data collection subroutine
+ 10.  002 080010  STARTLOOP:	PSH# STARTLEN; print out the first input query to get the starting address
+ 11.  003 080077  	PSH# STARTQ
+ 12.  004 412E05  	JSR PUTSTR
+ 13.  005 120002  	ADS# 2
+ 14.  006 412E01  	JSR GETNUM; actually get the user-inputted value
+ 15.  007 200000  	CMA# 0; make sure it's greater than 0
+ 16.  008 4A200B  	JLT STARTERROR
+ 17.  009 200FFF  	CMA# $FFF; and less than the highest possible address
+ 18.  00A 4A2011  	JLT STARTCONT
+ 19.  00B 080010  STARTERROR:	PSH# ERRLEN; if it's not a valid address, print out an error message
+ 20.  00C 080082  	PSH# INERROR
+ 21.  00D 412E05  	JSR PUTSTR
+ 22.  00E 120002  	ADS# 2
+ 23.  00F 412E06  	JSR PUTNL
+ 24.  010 402002  	JMP STARTLOOP; and try again
+ 25.  011 FFF010  STARTCONT:	PSHA ; load the valid starting address onto the stack for the data colleciton subroutine
+ 26.  012 04202D  	STA NSAMPLE; and hold it in the number of samples to subtract from
+ 27.  013 08000E  ENDLOOP:	PSH# ENDLEN; print out the query for the ending address
+ 28.  014 08007D  	PSH# ENDQ
+ 29.  015 412E05  	JSR PUTSTR
+ 30.  016 120002  	ADS# 2
+ 31.  017 412E01  	JSR GETNUM; actually get the ending address
+ 32.  018 200FFF  	CMA# $FFF; make sure it's less than the maximum address
+ 33.  019 4D201C  	JGT ENDERROR
+ 34.  01A 20202D  	CMA NSAMPLE; and greater than the starting address
+ 35.  01B 4D2022  	JGT ENDCONT
+ 36.  01C 080010  ENDERROR:	PSH# ERRLEN; print out an error message
+ 37.  01D 080082  	PSH# INERROR
+ 38.  01E 412E05  	JSR PUTSTR
+ 39.  01F 120002  	ADS# 2
+ 40.  020 412E06  	JSR PUTNL
+ 41.  021 402013  	JMP ENDLOOP; and try again
+ 42.  022 FFF010  ENDCONT:	PSHA ; once we have a valid end address, push it onto the stack for the analysis procedure
+ 43.  023 08000A  	PSH# MODES; also push on the number of valid modes (which is the size of the data array)
+ 44.  024 08002D  	PSH# NSAMPLE; and the place to store the total number of samples
+ 45.  025 412038  	JSR HSTGRM; now go through that area of memory and fill up the array of addressing modes
+ 46.  026 120004  	ADS# 4; clear the stack of everything but the address of the array
+ 47.  027 08000A  	PSH# MODES; add back on the number of modes
+ 48.  028 08202D  	PSH NSAMPLE; and the total number of samples (just as a constant this time)
+ 49.  029 412050  	JSR NORMLZ; to normalize the results
+ 50.  02A 120001  	ADS# 1; clear the number of samples off the stack, we just need the array and its length
+ 51.  02B 41205E  	JSR PRINT; print out the results
+ 52.  02C FFFFFF  	HLT
+ 53.              
+ 54.  02D 000000  NSAMPLE:	.WORD 0; to hold the number of addresses examined
+ 55.  02E 000000  DATA:	.BLKW 10, 0; to hold the data for the histogram
+ 56.              
+ 57.              ; PROCEDURE HSTGRM(VAR INARR:INTEGER_ARRAY, LOWADDR,HIGHADDR:INTEGER, VAR TOTAL:INTEGER)
+ 58.              ; Goes through the designated area of memory and adds the number of words with each addressing mode to the array
+ 59.              	.EQU TOTAL, 2
+ 60.              	.EQU SIZE, 3
+ 61.              	.EQU HIGHADDR, 4
+ 62.              	.EQU LOWADDR, 5
+ 63.              	.EQU INARR, 6
+ 64.              
+ 65.  038 680000  HSTGRM:	BGN# 0
+ 66.  039 FFF010  	PSHA
+ 67.  03A FFF011  	PSHX
+ 68.  03B 003005  	LDA ! LOWADDR; grab the starting address
+ 69.  03C 04204D  	STA CURADDR; and store it as the current address
+ 70.  03D 00604D  HSTLOOP:	LDA* CURADDR; load the contents of the current address into the accumulator
+ 71.  03E 30204E  	AND MODEMSK; grab the addressing mode
+ 72.  03F 19204F  	DIV MODEDIV; shift the line so we actually have the value of the addressing mode
+ 73.  040 203003  	CMA ! SIZE; real operating modes are 0-9, so if it's 10 or greater, it's not real
+ 74.  041 4B2045  	JGE HSTCONT; and the loop should just continue
+ 75.  042 FFF000  	TAX ; if it's a reasonable value, put it in the index register
+ 76.  043 1B9006  	INC& ! INARR; use the index register to increment the corresponding item in the data array
+ 77.  044 1B7002  	INC* ! TOTAL; also increment the total number of values counted
+ 78.  045 1B204D  HSTCONT:	INC CURADDR; now the loop continues with incrementing the current address
+ 79.  046 003004  	LDA ! HIGHADDR; grab the ending address from the stack
+ 80.  047 20204D  	CMA CURADDR; to compare with the current address
+ 81.  048 4B203D  	JGE HSTLOOP; if we haven't passed the ending address yet keep going
+ 82.  049 FFF014  	POPX ; when the loop is done, exit the function
+ 83.  04A FFF013  	POPA
+ 84.  04B 690000  	FIN# 0
+ 85.  04C FFF040  	RTN
+ 86.              
+ 87.  04D 000000  CURADDR:	.WORD 0; to hold the current address being examined
+ 88.  04E 00F000  MODEMSK:	.WORD $00F000; to access the addressing mode (too many bits to be put in directly)
+ 89.  04F 001000  MODEDIV:	.WORD $1000; and move it over to the lowest bits in the accumulator
+ 90.              
+ 91.              ; PROCEDURE NORMLZ(VAR INARR:INTEGER_ARRAY, SIZE: INTEGER, TOTAL:INTEGER)
+ 92.              ; goes through the data array and normalizes the results to a percent of the total
+ 93.              	.EQU NTOTAL, 2
+ 94.              	.EQU NSIZE, 3
+ 95.              	.EQU NARR, 4
+ 96.              
+ 97.  050 680000  NORMLZ:	BGN# 0
+ 98.  051 FFF010  	PSHA
+ 99.  052 FFF011  	PSHX
+100.  053 013003  	LDX ! NSIZE; load up the index array to count down
+101.  054 150001  	SBX# 1; subtract 1, because we want the last index, not the size
+102.  055 009004  NLOOP:	LDA& ! NARR; load the current value of the array into the accumulator
+103.  056 180064  	MUL# 100; multiply it by 100 because fractions don't work, so we have to use percents
+104.  057 193002  	DIV ! NTOTAL; and then divide by the total number of samples
+105.  058 049004  	STA& ! NARR; and put the new, normalized value back
+106.  059 612055  	SOJ NLOOP; subtract and keep looping through the whole data array
+107.  05A FFF014  	POPX
+108.  05B FFF013  	POPA
+109.  05C 690000  	FIN# 0
+110.  05D FFF040  	RTN
+111.              
+112.              ; PROCEDURE PRINT(VAR DATA:INTEGER_ARRAY, N:INTEGER)
+113.              ; Prints out the histogram (I'm going to see if I can make it pretty)
+114.              	.EQU PN, 2
+115.              	.EQU PDATA, 3
+116.              
+117.  05E 680000  PRINT:	BGN# 0
+118.  05F FFF010  	PSHA
+119.  060 FFF011  	PSHX
+120.  061 010000  	LDX# 0; start off the index at 0 (we need to go through the array in order)
+121.  062 009003  PLOOP:	LDA& ! PDATA; grab the current item in the array
+122.  063 200000  	CMA# 0; check if there's just a 0
+123.  064 4D2067  	JGT PROWLOOP; if not, go and print out the row propperly
+124.  065 412E06  	JSR PUTNL; if it is a 0, just print out a new line
+125.  066 402071  	JMP PCONT; and continue the loop
+126.  067 20000A  PROWLOOP:	CMA# 10; now check if it's less than 10
+127.  068 4B206B  	JGE ROWCONT; if it's at least 10, more needs to be done
+128.  069 412E00  	JSR PUTNUM; if it's less than 10, just print out the value
+129.  06A 402071  	JMP PCONT; and continue the print loop
+130.  06B 080001  ROWCONT:	PSH# NLEN; if it's greater than 10, print out a 9 for that digit
+131.  06C 080088  	PSH# NINE
+132.  06D 412E05  	JSR PUTSTR
+133.  06E 120002  	ADS# 2
+134.  06F 14000A  	SBA# 10; and then subtract 10 and continue the loop
+135.  070 402067  	JMP PROWLOOP
+136.  071 603002  PCONT:	AOC ! PN; increment the index and compare to the number of itmes
+137.  072 4A2062  	JLT PLOOP; jump if there's still items to go
+138.  073 FFF014  	POPX ; when it's done, end the function
+139.  074 FFF013  	POPA
+140.  075 690000  	FIN# 0
+141.  076 FFF040  	RTN
+142.              
+143.  077 537461  STARTQ:	.CHAR 'Starting address', STARTLEN
+      078 727469
+      079 6E6720
+      07A 616464
+      07B 726573
+      07C 732020
+144.  07D 456E64  ENDQ:	.CHAR 'Ending address', ENDLEN
+      07E 696E67
+      07F 206164
+      080 647265
+      081 737320
+145.  082 496E76  INERROR:	.CHAR 'Invalid address!', ERRLEN
+      083 616C69
+      084 642061
+      085 646472
+      086 657373
+      087 212020
+146.  088 392020  NINE:	.CHAR '9', NLEN; to print out a cooler histogram
+
+                     SYMBOL TABLE CONTENTS
+
+00004D = CURADDR         00002E = DATA            000022 = ENDCONT         
+00001C = ENDERROR        00000E = ENDLEN          000013 = ENDLOOP         
+00007D = ENDQ            000010 = ERRLEN          000E01 = GETNUM          
+000004 = HIGHADDR        000045 = HSTCONT         000038 = HSTGRM          
+00003D = HSTLOOP         000006 = INARR           000082 = INERROR         
+000005 = LOWADDR         000000 = MAIN            00004F = MODEDIV         
+00004E = MODEMSK         00000A = MODES           000004 = NARR            
+000088 = NINE            000001 = NLEN            000055 = NLOOP           
+000050 = NORMLZ          00002D = NSAMPLE         000003 = NSIZE           
+000002 = NTOTAL          000071 = PCONT           000003 = PDATA           
+000062 = PLOOP           000002 = PN              00005E = PRINT           
+000067 = PROWLOOP        000E06 = PUTNL           000E00 = PUTNUM          
+000E05 = PUTSTR          00006B = ROWCONT         000003 = SIZE            
+000011 = STARTCONT       00000B = STARTERROR      000010 = STARTLEN        
+000002 = STARTLOOP       000077 = STARTQ          000002 = TOTAL           

@@ -1,0 +1,106 @@
+	.EQU KBDSTAT, $000
+	.EQU KBDDATA, $001
+	.EQU DISPSTAT, $316
+	.EQU DISPDATA, $317
+
+MAIN:	LDS# $E00
+	PSH# STRS; start by reading in the first string
+	JSR READSTR
+	ADS# 1
+	DIV# 3; see how many lines of memory the word actually took
+	ADA# STRS+1; and add it to the starting address (plus 1 to be safe)
+	STA STR2START; save that as the address of the second string
+	PSHA ; and put it on the stack
+	JSR READSTR; to read in that second string
+	ADS# 1
+	PSH# STRS; grab the first string again to print it out
+	JSR PUTSTR
+	ADS# 1
+	PSH STR2START; and then print out the second string
+	JSR PUTSTR
+	ADS# 1
+	PSH# STRS
+	PSH STR2START
+	JSR STRCMP
+	HLT
+	
+	
+; FUNCTION READSTR(VAR STRSTART:CHAR_STRING)
+; Reads in a user provided-string, stores it starting at the given location, and leaves its length in the accumulator
+	.EQU STRSTART, 2
+	
+READSTR:	BGN# 0
+	PSHX
+	LDX# 0; start off the index array at 0
+POLL:	INB KBDSTAT; check if there's anything available until there is
+	JGE POLL
+	INW KBDDATA; once there's something there, read it in
+	DIV SHIFTWRD; shift it from the first to the last 8 bits
+	CMA# $0D; check if it was a carriage return (ENTER)
+	JEQ READEXIT; if it was, the word is done
+	STC* ! STRSTART; if its not a carraige return, just save the word
+	ADX# 1; increment the index register
+	JMP POLL; and get the next letter
+READEXIT:	LDA# 0; if it was a carriage return, make it a 0 instead
+	STC* ! STRSTART; store that to end the string
+	ADX# 1; increment the index register
+	TXA ; and put it into the accumulator for the calling function to use
+	POPX
+	FIN# 0
+	RTN
+
+; PROCEDURE PUTSTR(VAR STR:CHAR_STRING)
+; Takes a string from memory and prints it out to the display (assumes all strings end with $00)
+	.EQU STR, 2
+
+PUTSTR:	BGN# 0
+	PSHA
+	PSHX
+	LDX# 0; start again at index 0
+PUTLOOP:	LDC* ! 2; get the next character
+	JEQ PUTEXIT; if it's 0, then the string is over
+	MUL SHIFTWRD; to put the character at the front of the accumulator
+	OUTW DISPDATA; otherwise, print it out
+	ADX# 1; increment the index register
+	JMP PUTLOOP; and keep looping
+PUTEXIT:	LDA# $05; when the word is done, make a new line (i.e. go to the next line)
+	OUTB DISPSTAT
+	POPX
+	POPA
+	FIN# 0
+	RTN
+
+; FUNCTION STRCMP(VAR S1,S2:CHAR_STRING): INTEGER
+; Compares the two strings provided and returns an integer based on which is bigger
+	.EQU S2, 2
+	.EQU S1, 3
+
+STRCMP:	BGN# 0
+	PSHX
+	LDX# 0; start going through the strings from the start
+CMPLOOP:	LDC* ! S1; grab the current character in string 1
+	STA CURCHAR; store it for comparison
+	LDC* ! S2; grab the current character in string 2
+	CMA CURCHAR; compare it to the stored character from string 1
+	JLT GREATER; if string 1 is greater than string 2
+	JGT LESSTHN; if string 1 is less than string 2
+	CMA# 0; check if they're both equal to zero
+	JEQ EQUAL; if the two strings are also at 0 (were entirely the same)
+	ADX# 1; if just these values are the same, increment the index register
+	JMP CMPLOOP; and keep looping
+EQUAL:	LDA# 0; if the strings are the same, return 0
+	JMP DONE; and go to end the function
+GREATER:	LDA# 1; if string 1 is greater, return 1
+	JMP DONE; and go end the function
+LESSTHN:	LDA# 1; if string 2 is greater, return -1
+	NEGA
+DONE:	POPX
+	FIN# 0
+	RTN
+	
+CURCHAR:	.WORD 0; to store the current character of string 1 (since one loads at a time)
+
+
+SHIFTWRD:	.WORD $010000; to shift the value in the accumulator (too long to be an address)
+STR2START:	.WORD 0; address where string 2 starts
+STRS:	.WORD 0; where string 1 starts (not sure how far in it'll go)

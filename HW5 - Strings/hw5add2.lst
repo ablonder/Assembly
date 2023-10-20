@@ -1,0 +1,35 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              	.EQU @, 0
+  2.              	.EQU KBDSTAT, $000; to access the keyboard directly
+  3.              	.EQU KBDDATA, $001
+  4.              	.EQU DISPSTAT, $316
+  5.              	.EQU DISPDATA, $317
+  6.              
+  7.  000 020E00  MAIN:	LDS# $E00
+  8.  001 000080  	LDA# $80; set interrupts enabled on the keyboard
+  9.  002 712000  	OUTB KBDSTAT
+ 10.  003 FFF032  	SIE ; and set the interrupt enable flag
+ 11.  004 FFF038  NOPLOOP:	NOP ; now we just hang around and wait for interrupts
+ 12.  005 402004  	JMP NOPLOOP
+ 13.              
+ 14.              ; keyboard interrupt procedure to get the input and add 2
+ 15.  006 680000  KBDINT:	BGN# 0
+ 16.  007 FFF010  	PSHA
+ 17.  008 722001  	INW KBDDATA; actually get the data from the keyboard
+ 18.  009 102010  	ADA TWO; add 2 to the character
+ 19.  00A 732317  	OUTW DISPDATA; and give it back to the keyboard
+ 20.  00B 0000C0  	LDA# $C0; I'm going to try clearing the keyboard buffer when done
+ 21.  00C 712000  	OUTB KBDSTAT
+ 22.  00D FFF013  	POPA
+ 23.  00E 690000  	FIN# 0
+ 24.  00F FFF041  	IRTN
+ 25.  010 020000  TWO:	.WORD $020000; has to be stored in memory because it's too big for immediate
+ 26.              
+ 27.              	.EQU @, $FF8; to set up the right location in the interrupt vector
+ 28.  FF8 000006  	.WORD KBDINT
+
+                     SYMBOL TABLE CONTENTS
+
+000317 = DISPDATA        000316 = DISPSTAT        000001 = KBDDATA         
+000006 = KBDINT          000000 = KBDSTAT         000000 = MAIN            
+000004 = NOPLOOP         000010 = TWO             

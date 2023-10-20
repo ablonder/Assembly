@@ -1,0 +1,119 @@
+LINE ADDR CONTENTS SOURCE LINE
+  1.              	.EQU KBDSTAT, $000
+  2.              	.EQU KBDDATA, $001
+  3.              	.EQU DISPSTAT, $316
+  4.              	.EQU DISPDATA, $317
+  5.              
+  6.  000 020E00  MAIN:	LDS# $E00
+  7.  001 080050  	PSH# STRS; start by reading in the first string
+  8.  002 412014  	JSR READSTR
+  9.  003 120001  	ADS# 1
+ 10.  004 190003  	DIV# 3; see how many lines of memory the word actually took
+ 11.  005 100051  	ADA# STRS+1; and add it to the starting address (plus 1 to be safe)
+ 12.  006 04204F  	STA STR2START; save that as the address of the second string
+ 13.  007 FFF010  	PSHA ; and put it on the stack
+ 14.  008 412014  	JSR READSTR; to read in that second string
+ 15.  009 120001  	ADS# 1
+ 16.  00A 080050  	PSH# STRS; grab the first string again to print it out
+ 17.  00B 412027  	JSR PUTSTR
+ 18.  00C 120001  	ADS# 1
+ 19.  00D 08204F  	PSH STR2START; and then print out the second string
+ 20.  00E 412027  	JSR PUTSTR
+ 21.  00F 120001  	ADS# 1
+ 22.  010 080050  	PSH# STRS
+ 23.  011 08204F  	PSH STR2START
+ 24.  012 412037  	JSR STRCMP
+ 25.  013 FFFFFF  	HLT
+ 26.              	
+ 27.              	
+ 28.              ; FUNCTION READSTR(VAR STRSTART:CHAR_STRING)
+ 29.              ; Reads in a user provided-string, stores it starting at the given location, and leaves its length in the accumulator
+ 30.              	.EQU STRSTART, 2
+ 31.              	
+ 32.  014 680000  READSTR:	BGN# 0
+ 33.  015 FFF011  	PSHX
+ 34.  016 010000  	LDX# 0; start off the index array at 0
+ 35.  017 702000  POLL:	INB KBDSTAT; check if there's anything available until there is
+ 36.  018 4B2017  	JGE POLL
+ 37.  019 722001  	INW KBDDATA; once there's something there, read it in
+ 38.  01A 19204E  	DIV SHIFTWRD; shift it from the first to the last 8 bits
+ 39.  01B 20000D  	CMA# $0D; check if it was a carriage return (ENTER)
+ 40.  01C 482020  	JEQ READEXIT; if it was, the word is done
+ 41.  01D 517002  	STC* ! STRSTART; if its not a carraige return, just save the word
+ 42.  01E 110001  	ADX# 1; increment the index register
+ 43.  01F 402017  	JMP POLL; and get the next letter
+ 44.  020 000000  READEXIT:	LDA# 0; if it was a carriage return, make it a 0 instead
+ 45.  021 517002  	STC* ! STRSTART; store that to end the string
+ 46.  022 110001  	ADX# 1; increment the index register
+ 47.  023 FFF003  	TXA ; and put it into the accumulator for the calling function to use
+ 48.  024 FFF014  	POPX
+ 49.  025 690000  	FIN# 0
+ 50.  026 FFF040  	RTN
+ 51.              
+ 52.              ; PROCEDURE PUTSTR(VAR STR:CHAR_STRING)
+ 53.              ; Takes a string from memory and prints it out to the display (assumes all strings end with $00)
+ 54.              	.EQU STR, 2
+ 55.              
+ 56.  027 680000  PUTSTR:	BGN# 0
+ 57.  028 FFF010  	PSHA
+ 58.  029 FFF011  	PSHX
+ 59.  02A 010000  	LDX# 0; start again at index 0
+ 60.  02B 507002  PUTLOOP:	LDC* ! 2; get the next character
+ 61.  02C 482031  	JEQ PUTEXIT; if it's 0, then the string is over
+ 62.  02D 18204E  	MUL SHIFTWRD; to put the character at the front of the accumulator
+ 63.  02E 732317  	OUTW DISPDATA; otherwise, print it out
+ 64.  02F 110001  	ADX# 1; increment the index register
+ 65.  030 40202B  	JMP PUTLOOP; and keep looping
+ 66.  031 000005  PUTEXIT:	LDA# $05; when the word is done, make a new line (i.e. go to the next line)
+ 67.  032 712316  	OUTB DISPSTAT
+ 68.  033 FFF014  	POPX
+ 69.  034 FFF013  	POPA
+ 70.  035 690000  	FIN# 0
+ 71.  036 FFF040  	RTN
+ 72.              
+ 73.              ; FUNCTION STRCMP(VAR S1,S2:CHAR_STRING): INTEGER
+ 74.              ; Compares the two strings provided and returns an integer based on which is bigger
+ 75.              	.EQU S2, 2
+ 76.              	.EQU S1, 3
+ 77.              
+ 78.  037 680000  STRCMP:	BGN# 0
+ 79.  038 FFF011  	PSHX
+ 80.  039 010000  	LDX# 0; start going through the strings from the start
+ 81.  03A 507003  CMPLOOP:	LDC* ! S1; grab the current character in string 1
+ 82.  03B 04204D  	STA CURCHAR; store it for comparison
+ 83.  03C 507002  	LDC* ! S2; grab the current character in string 2
+ 84.  03D 20204D  	CMA CURCHAR; compare it to the stored character from string 1
+ 85.  03E 4A2046  	JLT GREATER; if string 1 is greater than string 2
+ 86.  03F 4D2048  	JGT LESSTHN; if string 1 is less than string 2
+ 87.  040 200000  	CMA# 0; check if they're both equal to zero
+ 88.  041 482044  	JEQ EQUAL; if the two strings are also at 0 (were entirely the same)
+ 89.  042 110001  	ADX# 1; if just these values are the same, increment the index register
+ 90.  043 40203A  	JMP CMPLOOP; and keep looping
+ 91.  044 000000  EQUAL:	LDA# 0; if the strings are the same, return 0
+ 92.  045 40204A  	JMP DONE; and go to end the function
+ 93.  046 000001  GREATER:	LDA# 1; if string 1 is greater, return 1
+ 94.  047 40204A  	JMP DONE; and go end the function
+ 95.  048 000001  LESSTHN:	LDA# 1; if string 2 is greater, return -1
+ 96.  049 FFF020  	NEGA
+ 97.  04A FFF014  DONE:	POPX
+ 98.  04B 690000  	FIN# 0
+ 99.  04C FFF040  	RTN
+100.              	
+101.  04D 000000  CURCHAR:	.WORD 0; to store the current character of string 1 (since one loads at a time)
+102.              
+103.              
+104.  04E 010000  SHIFTWRD:	.WORD $010000; to shift the value in the accumulator (too long to be an address)
+105.  04F 000000  STR2START:	.WORD 0; address where string 2 starts
+106.  050 000000  STRS:	.WORD 0; where string 1 starts (not sure how far in it'll go)
+
+                     SYMBOL TABLE CONTENTS
+
+00003A = CMPLOOP         00004D = CURCHAR         000317 = DISPDATA        
+000316 = DISPSTAT        00004A = DONE            000044 = EQUAL           
+000046 = GREATER         000001 = KBDDATA         000000 = KBDSTAT         
+000048 = LESSTHN         000000 = MAIN            000017 = POLL            
+000031 = PUTEXIT         00002B = PUTLOOP         000027 = PUTSTR          
+000020 = READEXIT        000014 = READSTR         000003 = S1              
+000002 = S2              00004E = SHIFTWRD        000002 = STR             
+00004F = STR2START       000037 = STRCMP          000050 = STRS            
+000002 = STRSTART        

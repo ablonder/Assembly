@@ -1,0 +1,17 @@
+y = (coord-100)/38
+x = (coord-100)%38
+cord = (y*38)+x+100
+
+
+Counterclockwise:
+newx = o-y
+newy = o+x
+Clockwise:
+newx = o+y
+newy = o-x
+
+1, 3
+-3, 1
+-1, -3
+3, -1
+

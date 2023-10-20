@@ -1,0 +1,14 @@
+load critical val
+load number of vals
+while number =< 0:
+	print 0
+	ask for new number
+for 0 to number of vals:
+	load val
+	if val < critical val:
+		increment less than count
+	else:
+		increment >= count
+print less than count
+print greater than count
+HLT
